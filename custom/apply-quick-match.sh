@@ -1,9 +1,14 @@
 #!/bin/sh
 # 快速匹配（本机定制）—— apply or re-apply over the official install.
 #
-# 两个文件：
+# 三个文件：
 #   server/lobby.js            新增 room.quickMatch / room.setOpen，Room.open 字段，开局清标记
+#   shared/protocol.js         C2S 白名单登记（少了这条客户端根本不发包，见下）
 #   public/js/screens/lobby.js 「快速匹配」按钮（仅同盟模式显示）
+#
+# ⚠️ 协议白名单：public/js/net.js 的 request()/send() 会先跑 validateC2S()，
+#    未登记的 t 在浏览器本地就被拒掉（控制台 [net] refusing invalid …），
+#    WebSocket 一个字节都不会发，服务端日志里也看不出任何异常 —— 排查时别被误导。
 #
 # 行为：选难度后点「快速匹配」→ 服务端找一个同 mode+difficulty、未开局、有空位的
 # 开放房间直接 join；找不到就帮你 create 一间并标记为开放，别人点同样的按钮会进来。
