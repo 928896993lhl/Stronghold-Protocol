@@ -1,0 +1,21 @@
+const { cdn } = require('./tc.js');
+(async () => {
+  const r = await cdn('DescribeDomainsConfig', { Domain: process.env.CDN_DOMAIN || 'sp.example.com' });
+  const c = (r.Response && r.Response.DomainConfigs) || {};
+  const pick = (o, ...ks) => { const out = {}; for (const k of ks) out[k] = (o || {})[k]; return out; };
+  console.log('=== HTTPS ===');
+  console.log(JSON.stringify(pick(c.Https, 'Switch', 'Http2', 'OcspStapling', 'CertInfo'), null, 1));
+  console.log('=== 强制 HTTPS ===');
+  console.log(JSON.stringify(c.ForceRedirect));
+  console.log('=== 缓存 SimpleCache（关键，曾被误清空）===');
+  console.log(JSON.stringify(pick(c.Cache, 'Switch', 'CacheRules'), null, 1).slice(0, 700));
+  console.log('=== 回源 ===');
+  console.log(JSON.stringify(pick(c.Origin, 'Origins', 'OriginType')));
+  console.log('=== 压缩 / Range / 回源 Host ===');
+  console.log('Compression:', JSON.stringify(pick(c.Compression, 'Switch')));
+  console.log('Range:', JSON.stringify(pick((c.Range)||(c.Cache||{}), 'Switch')));
+  console.log('=== 状态 ===');
+  const s = await cdn('DescribeDomains', { Limit: 5 });
+  const d = ((s.Response||{}).Domains||[])[0] || {};
+  console.log('Status:', d.Status, '| CNAME:', d.Cname, '| UpdateTime:', d.UpdateTime);
+})().catch(e => console.error('FATAL', e.message));
