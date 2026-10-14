@@ -16,7 +16,7 @@
 | 2 | Google Fonts 自托管：首屏消除 ~0.94 MB / 17 次跨站请求 | public/index.html + public/assets/fonts/ | `python3 custom/apply-fonts.py` | 2026-10-09 |
 | 3 | v0.2.6 内容哈希 URL 剥离（`/assets/~<16hex>/...` 还原成真实路径） | nginx 配置 | `custom/nginx-hash.conf`（include） | 2026-10-13 |
 | 4 | 实时伤害统计面板：右侧竖排显示每个干员本局累计伤害 / 击杀 / 承伤 | 4 个：game.css / runner.js / game.js / **damageBoard.js（新增）** | `bash custom/apply-damage-board.sh`（damage-board.patch） | 2026-10-14 |
-| 5 | 在线人数汇总：标题页徽标（20 s 轮询）+ 运营看板 `/stats/`（1 min 采样、24 h 曲线） | 3 个：title.js / title.css / **ui/onlineCount.js（新增）** + `custom/stats/` 独立目录 | `bash custom/apply-online-count.sh` + `bash custom/stats/install.sh` | 2026-10-14 |
+| 5 | 在线人数汇总：标题页徽标 + 匹配页顶栏（20 s 轮询）+ 运营看板 `/stats/`（1 min 采样、24 h 曲线） | 5 个：title.js / title.css / screens/lobby.js / lobby.css / **ui/onlineCount.js（新增）** + `custom/stats/` 独立目录 | `bash custom/apply-online-count.sh` + `bash custom/stats/install.sh` | 2026-10-14 |
 
 数据都来自上游公开的 `/healthz`（`server/http/routes.js`，上游自己的 `buildGuard.js` 也在拉），
 零服务端改动。**在线数必须取 `sockets`**：`sessions` / `rooms` / `matches` 会把断线后仍保留、
@@ -71,7 +71,7 @@
 custom/
 ├── wish.patch / apply-wish.sh              # 阵营许愿（7 文件）
 ├── damage-board.patch / apply-damage-board.sh   # 伤害统计面板（4 文件）
-├── online-count.patch / apply-online-count.sh   # 在线人数徽标（3 文件）
+├── online-count.patch / apply-online-count.sh   # 在线人数徽标（5 文件）
 ├── addr-limits.patch / apply-addr-limits.sh     # 同 IP 上限可环境变量覆盖
 ├── quick-match.patch / apply-quick-match.sh      # 快速匹配（3 文件，含 protocol.js 白名单）
 │   └── addr-limits.systemd.conf                 #   数值 drop-in（512 / 64 / 32）

@@ -238,3 +238,9 @@
 .create-box { margin-top: .3rem; display: flex; flex-direction: column; gap: .12rem; }
 .create-box .btn--xl { height: .92rem; font-size: calc(.32 * var(--t)); letter-spacing: .3em; }
 .create-box__hint { display: flex; align-items: center; justify-content: center; min-height: .3rem; font-size: calc(.14 * var(--t)); color: var(--text-lo); }
+
+/* ── 在线人数（本机定制，ui/onlineCount.js）─────────────────────────────────
+   顶栏左侧、ping 旁边复用标题页的 .onlc 胶囊（样式在 title.css，index.html 全局加载）。
+   这里只覆盖一点：标题页登录卡片是纵向布局、靠 align-self: flex-start 顶左，
+   顶栏是横向 flex，改回居中；flex: none 防止窄屏下被压缩换行。 */
+.topbar .onlc { align-self: center; flex: none; }

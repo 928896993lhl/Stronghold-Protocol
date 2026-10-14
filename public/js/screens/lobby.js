@@ -11,6 +11,7 @@
 // Texts go through t() (docs/I18N.md); the module-level tables hold msgids (N_) translated where they are shown, the
 // config.json mode texts come localized from data.js.
 
+import { OnlineCount } from '../ui/onlineCount.js'; // 本机定制：顶栏显示「N 人在线」，与标题页共用一个组件
 import { ResumeMatchButton } from '../ui/resumeMatch.js';
 import { useEffect, useRef, useState } from '../../vendor/hooks.module.js';
 import { DIFFICULTIES, DIFFICULTY_NAMES, DIFFICULTY_COLORS, ROOM_CODE_LEN, MAX_SEATS, MAX_SPECTATORS, modeIdFor, ERR } from '../../../shared/constants.js';
@@ -313,6 +314,7 @@ export function LobbyScreen() {
       <div class="topbar__left">
         <${Button} variant="ghost" size="sm" icon="chevronLeft" onClick=${backToTitle} title=${t('返回标题')}>${t('返回')}<//>
         <${PingPill} ms=${conn.ping} online=${online} />
+        <${OnlineCount} />
         <span class="topbar__sep" aria-hidden="true"></span>
         <div class="topbar__tools">
           <${SettingsButton} class="lobby-settings" variant="secondary" square=${true} />

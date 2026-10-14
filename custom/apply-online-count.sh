@@ -1,12 +1,19 @@
 #!/bin/sh
 # 在线人数徽标（本机定制功能）—— apply or re-apply over the official install.
 #
-# 三个文件：新增 public/js/ui/onlineCount.js，改 public/js/screens/title.js（引入 + 挂载）、
-# public/css/screens/title.css（.onlc* 样式）。
+# 五个文件：新增 public/js/ui/onlineCount.js，改 public/js/screens/title.js（引入 + 挂载）、
+# public/css/screens/title.css（.onlc* 样式）、public/js/screens/lobby.js（匹配页顶栏挂载）、
+# public/css/screens/lobby.css（顶栏内 align-self 覆盖）。
 #
 #   public/js/ui/onlineCount.js  —— 每 20 秒拉一次公开的 GET /healthz，显示「N 人在线」
 #   public/js/screens/title.js   —— 在 .title-login 卡片顶部挂载 <OnlineCount/>
 #   public/css/screens/title.css —— 胶囊样式与呼吸灯动画（onlc-pulse）
+#   public/js/screens/lobby.js   —— 匹配页顶栏、ping 旁边挂同一个 <OnlineCount/>
+#   public/css/screens/lobby.css —— .topbar .onlc { align-self: center; flex: none; }（横向顶栏适配）
+#
+# 注意 lobby.js 段的基线是上游原版（含快速匹配的改动在 quick-match.patch 里，顺序在本补丁之后），
+# 全链条重放（wish → damage-board → 本补丁 → addr-limits → quick-match）已在 2026-10-14 验证过：
+# 15 文件 + 2 新增与定制品逐字节一致。
 #
 # 安全前提：只读上游本来就公开的 /healthz（上游自己的 public/js/ui/buildGuard.js 每次页面
 # 加载都在拉它），不碰 server/**，不改协议，不影响确定性模拟与联机同步。响应头是
