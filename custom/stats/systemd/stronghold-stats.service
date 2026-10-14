@@ -1,0 +1,16 @@
+[Unit]
+Description=Stronghold online-count sampler (one shot)
+Documentation=file:/opt/stronghold/custom/stats/sample.py
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Environment=STATS_HEALTHZ=http://127.0.0.1:3000/healthz
+Environment=STATS_DATA_DIR=/opt/stronghold/custom/stats/data
+ExecStart=/usr/bin/python3 /opt/stronghold/custom/stats/sample.py
+
+# 采样脚本自己容错（服务器在重启时抓不到就打日志退出），这里不设 Restart：
+# 漏采一分钟无所谓，但不能因为重启风暴把定时器拖成循环。
+[Install]
+WantedBy=multi-user.target

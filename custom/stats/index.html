@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>在线人数汇总 · 卫戍协议：盟约</title>
+<style>
+  :root {
+    --bg: #080b0a; --panel: rgba(20, 25, 23, .82); --line: #1b2422; --line-2: #263330;
+    --mint: #17f9b7; --mint-dim: rgba(23, 249, 183, .14);
+    --hi: #e8f2ef; --mid: #9fb3ad; --lo: #6c807a; --amber: #ffb066;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--hi); }
+  body {
+    font: 14px/1.5 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    padding: 24px 20px 40px; min-height: 100vh;
+    background: radial-gradient(1200px 500px at 50% -10%, rgba(23, 249, 183, .06), transparent 70%);
+  }
+  .wrap { max-width: 940px; margin: 0 auto; }
+  header { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+  h1 { margin: 0; font-size: 20px; letter-spacing: .04em; font-weight: 600; }
+  h1 em { font-style: normal; color: var(--mint); }
+  .sub { color: var(--lo); font-size: 12px; margin-top: 4px; }
+  .live { display: inline-flex; align-items: center; gap: 6px; color: var(--mid); font-size: 12px; }
+  .live i { width: 8px; height: 8px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 8px var(--mint); animation: p 2.4s infinite; }
+  .live.is-down i { background: var(--amber); box-shadow: none; }
+  @keyframes p { 0%, 100% { opacity: 1 } 50% { opacity: .35 } }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--line-2); border-radius: 10px; padding: 14px 16px; position: relative; overflow: hidden; }
+  .card::before { content: ''; position: absolute; left: 0; top: 0; height: 2px; width: 40%; background: linear-gradient(90deg, var(--mint), transparent); }
+  .card b { display: block; font-size: 30px; line-height: 1.1; font-weight: 600; letter-spacing: .02em; }
+  .card span { color: var(--lo); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; }
+  .card small { display: block; color: var(--lo); font-size: 11px; margin-top: 6px; }
+  section { margin-top: 24px; background: var(--panel); border: 1px solid var(--line-2); border-radius: 10px; padding: 16px; }
+  h2 { margin: 0 0 4px; font-size: 14px; letter-spacing: .1em; color: var(--mid); font-weight: 600; }
+  .hint { color: var(--lo); font-size: 12px; margin: 0 0 12px; }
+  .today { display: flex; gap: 28px; flex-wrap: wrap; margin-bottom: 14px; }
+  .today div { }
+  .today b { font-size: 20px; font-weight: 600; }
+  .today span { display: block; color: var(--lo); font-size: 11px; letter-spacing: .1em; }
+  svg.chart { display: block; width: 100%; height: 150px; }
+  .down { color: var(--amber); }
+  footer { margin-top: 24px; color: var(--lo); font-size: 12px; line-height: 1.7; }
+  footer code { color: var(--mid); background: rgba(255, 255, 255, .05); padding: 1px 5px; border-radius: 4px; }
+  label.auto { display: inline-flex; align-items: center; gap: 6px; color: var(--lo); font-size: 12px; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>在线人数汇总 · <em>卫戍协议：盟约</em></h1>
+      <div class="sub">非官方同人复刻的自建服 · 数据来自公开的 <code>/healthz</code>（<code>no-store</code>，CDN 不缓存）</div>
+    </div>
+    <div style="text-align:right">
+      <div class="live" id="live"><i></i><span id="liveText">正在读取…</span></div>
+      <div class="sub" style="margin-top:6px">
+        <label class="auto"><input type="checkbox" id="auto" checked /> 每 15 秒自动刷新</label>
+      </div>
+    </div>
+  </header>
+
+  <div class="cards">
+    <div class="card"><span>在线玩家</span><b id="v-online">–</b><small id="s-sub">活着的 WebSocket 连接</small></div>
+    <div class="card"><span>进行中对局</span><b id="v-matches">–</b><small>含断线后残留的房间</small></div>
+    <div class="card"><span>房间</span><b id="v-rooms">–</b><small id="r-sub">同盟房间数</small></div>
+    <div class="card"><span>可恢复会话</span><b id="v-sessions">–</b><small>断线后仍保留，不是在线数</small></div>
+  </div>
+
+  <section>
+    <h2>今日</h2>
+    <p class="hint">采样器每分钟记录一次 <code>/healthz</code>，保留 30 天。</p>
+    <div class="today">
+      <div><b id="t-peak">–</b><span>峰值在线</span></div>
+      <div><b id="t-avg">–</b><span>平均在线</span></div>
+      <div><b id="t-samples">–</b><span>采样次数</span></div>
+      <div><b id="t-matches">–</b><span>峰值同时进行</span></div>
+    </div>
+    <svg class="chart" id="chart" viewBox="0 0 720 150" preserveAspectRatio="none" aria-label="今日在线人数曲线"></svg>
+    <p class="hint" id="histHint"></p>
+  </section>
+
+  <footer>
+    <div>服务端活体数据：<code>GET /healthz</code>；历史：<code>data/YYYY-MM-DD.ndjson</code>（每分钟一行）。</div>
+    <div>本站为非官方同人作品，与上海鹰角网络 / Yostar 无关，严禁任何形式的盈利。</div>
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var REFRESH_MS = 15000;
+  var timer = null;
+  var lastDown = false;
+
+  var $ = function (id) { return document.getElementById(id); };
+  var pad = function (n) { return n < 10 ? '0' + n : '' + n; };
+  var dayKey = function (d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); };
+
+  function setLive(down, text) {
+    var el = $('live');
+    if (down) el.classList.add('is-down'); else el.classList.remove('is-down');
+    $('liveText').textContent = text;
+  }
+
+  // ---------- live numbers ----------
+  async function poll() {
+    var t = null;
+    try {
+      var ctrl = new AbortController();
+      t = setTimeout(function () { ctrl.abort(); }, 5000);
+      var res = await fetch('/healthz', { cache: 'no-store', signal: ctrl.signal });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var j = await res.json();
+      clearTimeout(t);
+      // 在线只看 sockets：实测无人连接时 sessions 还长期停在 75（断线待恢复的房间），
+      // 拿它当在线数会虚高一个数量级。
+      $('v-online').textContent = j.sockets == null ? '–' : j.sockets;
+      $('v-sessions').textContent = j.sessions == null ? '–' : j.sessions;
+      $('v-matches').textContent = j.matches == null ? '–' : j.matches;
+      $('v-rooms').textContent = j.rooms == null ? '–' : j.rooms;
+      $('s-sub').textContent = '一个标签页算一个 · 观战 ' + (j.spectators || 0) + ' 席';
+      var up = j.uptimeSec || 0;
+      var hh = Math.floor(up / 3600), mm = Math.floor((up % 3600) / 60);
+      $('r-sub').textContent = '已运行 ' + (hh ? hh + ' 小时 ' : '') + mm + ' 分钟 · v' + (j.app || '');
+      setLive(false, '已更新 ' + new Date().toLocaleTimeString('zh-CN', { hour12: false }));
+      lastDown = false;
+    } catch (e) {
+      if (t) clearTimeout(t);
+      if (!lastDown) { setLive(true, '服务器无响应（可能是正在重启）'); lastDown = true; }
+    }
+  }
+
+  // ---------- today's history ----------
+  function draw(rows) {
+    var svg = $('chart');
+    var W = 720, H = 150, padB = 18;
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    if (!rows.length) { $('histHint').textContent = '暂无历史数据：采样器刚装好，等一分钟再看。'; return; }
+
+    // 24 buckets of the local hour -> peak sessions that hour
+    var buckets = [];
+    for (var i = 0; i < 24; i++) buckets.push({ h: i, peak: 0, sum: 0, n: 0 });
+    rows.forEach(function (r) {
+      var d = new Date(r.ts * 1000);
+      var b = buckets[d.getHours()];
+      if (!b) return;
+      if (r.sockets > b.peak) b.peak = r.sockets;
+      b.sum += r.sockets; b.n++;
+    });
+    var max = 1;
+    buckets.forEach(function (b) { if (b.peak > max) max = b.peak; });
+
+    var used = buckets.filter(function (b) { return b.n > 0; });
+    var peak = 0, sumAll = 0, peakM = 0;
+    // 峰值/平均也只认 sockets（断线残留的 sessions 会把曲线抬成一条平线）
+    rows.forEach(function (r) { if (r.sockets > peak) peak = r.sockets; sumAll += r.sockets; if (r.matches > peakM) peakM = r.matches; });
+    $('t-peak').textContent = peak;
+    $('t-avg').textContent = (sumAll / rows.length).toFixed(1);
+    $('t-samples').textContent = rows.length;
+    $('t-matches').textContent = peakM;
+    $('histHint').textContent = '横坐标是本地时间的小时；取该小时内在线人数的峰值。';
+
+    var step = W / 24;
+    function xy(i, v) { return [i * step + step / 2, H - padB - (v / max) * (H - padB - 12)]; }
+
+    function el(name, attrs) {
+      var n = document.createElementNS('http://www.w3.org/2000/svg', name);
+      Object.keys(attrs).forEach(function (k) { n.setAttribute(k, attrs[k]); });
+      svg.appendChild(n);
+      return n;
+    }
+    // grid
+    for (var g = 0; g <= 2; g++) {
+      var y = 12 + ((H - padB - 12) * g) / 2;
+      el('line', { x1: 0, y1: y, x2: W, y2: y, stroke: '#1b2422', 'stroke-width': 1 });
+    }
+    // area + line over the hours we have
+    var area = used.map(function (b) { return xy(b.h, b.peak); });
+    if (area.length > 1) {
+      var dPath = 'M' + area[0][0] + ',' + (H - padB) + ' L' + area.map(function (p) { return p[0] + ',' + p[1]; }).join(' L')
+        + ' L' + area[area.length - 1][0] + ',' + (H - padB) + ' Z';
+      el('path', { d: dPath, fill: 'rgba(23,249,183,.12)', stroke: 'none' });
+      el('polyline', { points: area.map(function (p) { return p[0] + ',' + p[1]; }).join(' '), fill: 'none', stroke: '#17f9b7', 'stroke-width': 2, 'stroke-linejoin': 'round' });
+      area.forEach(function (p) { el('circle', { cx: p[0], cy: p[1], r: 2.5, fill: '#17f9b7' }); });
+    }
+    // hour labels every 3 h
+    for (var hIdx = 0; hIdx < 24; hIdx += 3) {
+      var tx = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      tx.setAttribute('x', hIdx * step + step / 2);
+      tx.setAttribute('y', H - 4);
+      tx.setAttribute('fill', '#6c807a');
+      tx.setAttribute('font-size', '10');
+      tx.setAttribute('text-anchor', 'middle');
+      tx.textContent = pad(hIdx) + ':00';
+      svg.appendChild(tx);
+    }
+  }
+
+  async function loadHistory() {
+    try {
+      var res = await fetch('data/' + dayKey(new Date()) + '.ndjson', { cache: 'no-store' });
+      if (!res.ok) { draw([]); return; }
+      var text = await res.text();
+      var rows = [];
+      text.split('\n').forEach(function (line) {
+        if (!line.trim()) return;
+        try { rows.push(JSON.parse(line)); } catch (e) { /* skip a torn line */ }
+      });
+      draw(rows);
+    } catch (e) { draw([]); }
+  }
+
+  function schedule() {
+    if (timer) clearInterval(timer);
+    if ($('auto').checked) timer = setInterval(poll, REFRESH_MS);
+  }
+  $('auto').addEventListener('change', schedule);
+
+  poll();
+  loadHistory();
+  schedule();
+  setInterval(loadHistory, 60000);
+})();
+</script>
+</body>
+</html>

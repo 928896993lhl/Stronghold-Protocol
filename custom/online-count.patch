@@ -1,0 +1,107 @@
+diff -ruN old/public/css/screens/title.css new/public/css/screens/title.css
+--- old/public/css/screens/title.css	2026-10-14 14:54:21.639411000 +0800
++++ new/public/css/screens/title.css	2026-10-14 14:54:21.662411700 +0800
+@@ -283,3 +283,24 @@
+   font-weight: 700;
+   letter-spacing: .02em;
+ }
++
++/* ── 在线人数（本机定制功能，ui/onlineCount.js）───────────────────────────────
++   登录卡片顶部的一枚小胶囊：告诉来访的人这里有人在玩。数据来自公开的 /healthz，
++   拿不到数字时组件直接返回 null，所以这里不需要处理空态。 */
++.onlc {
++  display: inline-flex; align-items: center; align-self: flex-start; gap: .06rem;
++  padding: .04rem .12rem; border: 1px solid var(--line-2); border-radius: 999px;
++  background: rgba(23, 249, 183, .06);
++  font-size: calc(.13 * var(--t)); color: var(--text-lo); letter-spacing: .04em;
++}
++.onlc b { color: var(--text-hi); font-size: calc(.15 * var(--t)); font-weight: 600; }
++.onlc__sep { opacity: .5; margin: 0 .02rem; }
++.onlc__dot {
++  width: .08rem; height: .08rem; border-radius: 50%;
++  background: var(--mint-500); box-shadow: 0 0 .08rem var(--mint-glow);
++  animation: onlc-pulse 2.4s var(--ease-out) infinite;
++}
++@keyframes onlc-pulse {
++  0%, 100% { opacity: 1; }
++  50% { opacity: .35; }
++}
+diff -ruN old/public/js/screens/title.js new/public/js/screens/title.js
+--- old/public/js/screens/title.js	2026-10-14 14:54:21.517827500 +0800
++++ new/public/js/screens/title.js	2026-10-14 14:54:21.542827800 +0800
+@@ -15,6 +15,7 @@
+ import { NAME_MAX_LEN, APP_VERSION, DEV_BUILD } from '../../../shared/constants.js';
+ import { html, Button, Icon, MicroLabel, TextField, PingPill } from '../ui/components.js';
+ import { GuideButton } from '../ui/guide.js';
++import { OnlineCount } from '../ui/onlineCount.js';
+ import { openStats } from './stats.js';
+ import { toast } from '../ui/toasts.js';
+ import { net, identity } from '../net.js';
+@@ -265,6 +266,7 @@
+       <p class="title-tag">${t('调配资金与干员，与同伴协同布防，抵御多波次进攻，直至击败敌方领袖。')}</p>
+ 
+       <div class="title-login">
++        <${OnlineCount} />
+         ${pendingJoin ? html`<div class="title-invite">
+           <${Icon} name="key" />
+           <span>${t('收到同盟邀请')}</span><b class="num">${pendingJoin}</b><span class="t-lo">${t('· 输入代号后将自动加入')}</span>
+diff -ruN old/public/js/ui/onlineCount.js new/public/js/ui/onlineCount.js
+--- old/public/js/ui/onlineCount.js	1970-01-01 08:00:00.000000000 +0800
++++ new/public/js/ui/onlineCount.js	2026-10-14 14:54:21.707410300 +0800
+@@ -0,0 +1,56 @@
++// public/js/ui/onlineCount.js — 服务器在线人数（本机定制，见 custom/online-count.patch）
++//
++// 数据源是上游本来就公开的 GET /healthz：
++//   sockets    活着的 WebSocket 连接数 —— 这才是「在线」：实测开 1 个标签页就是 1
++//   sessions   会话数（含断线后仍保留、可恢复的那些，会长期虚高，不能当在线数）
++//   matches    进行中的对局数（同样含断线残留）
++//   rooms      房间数
++//   spectators 观战人数
++// 上游自己的 public/js/ui/buildGuard.js 就在拉同一个接口，所以这里不需要任何服务端改动：
++// 响应头是 Cache-Control: no-store，实测 CDN 边缘每次都是 Cache Miss（Age: 0），
++// 拿到的永远是当时的值，不会被缓存成过期数字。
++//
++// 拉不到就什么都不显示 —— 在线人数是装饰，不能让它给标题页带来报错或抖动。
++
++import { html } from './components.js';
++import { useEffect, useState } from '../../vendor/hooks.module.js';
++import { t } from '../../../shared/i18n.js';
++
++const POLL_MS = 20000;    // 20 s：比玩家进出的节奏快，对 /healthz 又几乎白给
++const MAX_WAIT_MS = 4000; // 服务端卡住时不要让请求一直吊着
++
++/**
++ * @param {{ pollMs?: number }} props
++ */
++export function OnlineCount({ pollMs = POLL_MS } = {}) {
++  const [stats, setStats] = useState(null);
++
++  useEffect(() => {
++    let alive = true;
++    let timer = null;
++    const read = async () => {
++      const ctrl = new AbortController();
++      const stop = setTimeout(() => ctrl.abort(), MAX_WAIT_MS);
++      try {
++        const res = await fetch('/healthz', { cache: 'no-store', signal: ctrl.signal });
++        const j = res.ok ? await res.json() : null;
++        // 只信 sockets：sessions/rooms/matches 会把断线后等待恢复的房间一直算进去
++        // （实测：无人连接时 sessions 仍长期停在 75，sockets 是 0）。
++        if (alive && j) setStats({ online: j.sockets | 0 });
++      } catch {
++        /* 拉不到就保留上一次的值：服务器抖动时不要闪 */
++      } finally {
++        clearTimeout(stop);
++      }
++    };
++    read();
++    timer = setInterval(read, pollMs);
++    return () => { alive = false; if (timer) clearInterval(timer); };
++  }, [pollMs]);
++
++  if (!stats) return null;
++  return html`<div class="onlc" role="note" title=${t('当前连着服务器的玩家数')}>
++    <span class="onlc__dot"></span>
++    <span><b>${stats.online}</b> ${t('人在线')}</span>
++  </div>`;
++}

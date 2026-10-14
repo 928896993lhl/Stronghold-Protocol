@@ -283,3 +283,24 @@ html[data-script="alphabetic"] .title-login .btn--xl { letter-spacing: .3em; }
   font-weight: 700;
   letter-spacing: .02em;
 }
+
+/* ── 在线人数（本机定制功能，ui/onlineCount.js）───────────────────────────────
+   登录卡片顶部的一枚小胶囊：告诉来访的人这里有人在玩。数据来自公开的 /healthz，
+   拿不到数字时组件直接返回 null，所以这里不需要处理空态。 */
+.onlc {
+  display: inline-flex; align-items: center; align-self: flex-start; gap: .06rem;
+  padding: .04rem .12rem; border: 1px solid var(--line-2); border-radius: 999px;
+  background: rgba(23, 249, 183, .06);
+  font-size: calc(.13 * var(--t)); color: var(--text-lo); letter-spacing: .04em;
+}
+.onlc b { color: var(--text-hi); font-size: calc(.15 * var(--t)); font-weight: 600; }
+.onlc__sep { opacity: .5; margin: 0 .02rem; }
+.onlc__dot {
+  width: .08rem; height: .08rem; border-radius: 50%;
+  background: var(--mint-500); box-shadow: 0 0 .08rem var(--mint-glow);
+  animation: onlc-pulse 2.4s var(--ease-out) infinite;
+}
+@keyframes onlc-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .35; }
+}

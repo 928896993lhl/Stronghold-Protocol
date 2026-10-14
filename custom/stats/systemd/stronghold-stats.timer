@@ -1,0 +1,11 @@
+[Unit]
+Description=Sample Stronghold online counts every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=5s
+Unit=stronghold-stats.service
+
+[Install]
+WantedBy=timers.target
