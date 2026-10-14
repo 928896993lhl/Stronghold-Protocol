@@ -85,11 +85,36 @@ export function assetIndexOptionsFrom(opts, publicDir) {
   return { cacheFile, ...(Number.isFinite(o.delayMs) ? { delayMs: o.delayMs } : {}) };
 }
 
+// ── 本机定制：让 LOBBY/NET_OPTION_KEYS 可以用环境变量覆盖 ────────────────────
+// 上游这两个函数只从 startServer() 的 opts 取值，没有环境变量入口，所以
+// maxConnectionsPerAddr（64）/ maxRoomsPerAddr（16）/ maxMatchesPerAddr（8）
+// 这类"同一出口 IP 的上限"只能改代码才能调。服务器准备对外开放：手机流量
+// 走 CGNAT 时几百人共享一个出口 IP，默认值会先于 maxRooms=1000 被撞到，
+// 症状是"有些人死活连不上/建不了房"，很难排查。
+//
+// 写法刻意保守：只接受非负数，读不到就返回 null（保持上游默认值），
+// 非数字型的键（如 trustProxy）取不到值会自动跳过，不影响原有行为。
+// 识别两种名字：SP_MAX_ROOMS_PER_ADDR 和原样的小驼峰键名。
+function envNumber(key) {
+  const snake = key.replace(/[A-Z]/g, (c) => '_' + c.toLowerCase());
+  for (const name of ['SP_' + snake.toUpperCase(), key]) {
+    const raw = process.env[name];
+    if (raw == null || String(raw).trim() === '') continue;
+    const n = Number(raw);
+    if (Number.isFinite(n) && n >= 0) return n;
+  }
+  return null;
+}
+
 /** net.js Network options out of the startServer() options; `trustProxy` falls back to TRUST_PROXY. */
 export function netOptionsFrom(opts) {
   const netOptions = {};
   for (const k of NET_OPTION_KEYS) {
     if (opts[k] != null) netOptions[k] = opts[k];
+    else {
+      const v = envNumber(k);
+      if (v != null) netOptions[k] = v;
+    }
   }
   if (netOptions.trustProxy == null) netOptions.trustProxy = parseTrustProxy(process.env.TRUST_PROXY);
   return netOptions;
@@ -100,6 +125,10 @@ export function lobbyOptionsFrom(opts) {
   const lobbyOptions = {};
   for (const k of LOBBY_OPTION_KEYS) {
     if (opts[k] != null) lobbyOptions[k] = opts[k];
+    else {
+      const v = envNumber(k);
+      if (v != null) lobbyOptions[k] = v;
+    }
   }
   return lobbyOptions;
 }
