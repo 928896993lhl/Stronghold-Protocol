@@ -6,6 +6,11 @@
 ![license](https://img.shields.io/badge/code%20license-GPL--3.0--or--later-blue)
 ![node](https://img.shields.io/badge/node-22%20%7C%2024-339933)
 
+> [!NOTE]
+> **本仓库是个人部署复刻**：上游 v0.2.6 + 4 项本机定制（阵营许愿 / Google Fonts 自托管 / nginx 内容哈希段剥离 / 实时伤害统计面板）。
+> 定制以「补丁 + 应用脚本」的形式维护在 [`custom/`](custom/README.md)，官方升级后可无损重放；`server/sim/` 零改动，联机同步的确定性不受影响。
+> 仓库内不含任何凭据；真实域名与服务器 IP 已脱敏为占位符。
+
 ## 声明
 
 > [!IMPORTANT]
