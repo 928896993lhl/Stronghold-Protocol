@@ -1,8 +1,9 @@
 # 本机定制说明（custom/）
 
 本仓库是 [sganggs/Stronghold-Protocol](https://github.com/sganggs/Stronghold-Protocol) 的个人部署复刻：
-**上游 v0.2.6 + 下列 5 项本机定制**。定制全部以「补丁 + 应用脚本」的形式维护在 `custom/`，
+**上游 v0.2.6 + 下列 6 项本机定制**。定制全部以「补丁 + 应用脚本」的形式维护在 `custom/`，
 官方升级后可无损重放；`server/sim/` 等主线代码零改动，联机同步的确定性不受影响。
+（第 6 项是唯一一项动到 `server/` 的，且只碰 `http/config.js` 的两个选项装配函数。）
 
 线上部署：`/opt/stronghold/Stronghold-Protocol`（systemd `stronghold.service`，Node 22，nginx 反代 + 腾讯云 CDN）。
 本目录与服务器 `/opt/stronghold/custom/` 一一对应，差异见文末。
@@ -20,6 +21,11 @@
 数据都来自上游公开的 `/healthz`（`server/http/routes.js`，上游自己的 `buildGuard.js` 也在拉），
 零服务端改动。**在线数必须取 `sockets`**：`sessions` / `rooms` / `matches` 会把断线后仍保留、
 等待恢复的房间一直算进去 —— 实测无人连接时这三项都停在 75 而 `sockets` 为 0，取错会虚高几十倍。
+| 6 | 放开同 IP 上限：`maxConnectionsPerAddr` / `maxRoomsPerAddr` / `maxMatchesPerAddr` 支持环境变量覆盖 | 1 个：`server/http/config.js`（数值走 systemd drop-in，不在游戏目录内） | `sh custom/apply-addr-limits.sh` + **重启 stronghold** | 2026-10-14 |
+
+上游这三个默认值（64 / 16 / 8）只能由代码传 `opts` 注入，没有环境变量入口。对外开放后
+手机流量走 CGNAT 时几百人共享一个出口 IP，会先撞到它们，症状是「有些人连不上、建不了房」，
+很像服务器挂了但其实是配额。**这是唯一一项改动 `server/` 的定制，必须重启游戏服务才生效。**
 
 ## 确定性三条铁律（为什么 sim/ 一个字节都没动）
 
@@ -41,7 +47,9 @@
 2. 解压官方 update 包覆盖，启动一次让它按 MANIFEST 校验（不过会拒绝启动）；
 3. **校验之前**，把「不在 update 包里、但被打过补丁」的文件还原成官方原版 —— 还原源必须用
    **目标版本 MANIFEST 的 sha256 反查**，绝不沿用上次升级的印象（曾因此连挂两次）；
-4. 停服，依次重跑：`apply-wish.sh` → `apply-fonts.py` → `apply-damage-board.sh` → `apply-online-count.sh`；
+4. 停服，依次重跑：`apply-wish.sh` → `apply-fonts.py` → `apply-damage-board.sh` →
+   `apply-online-count.sh` → `apply-addr-limits.sh`（**这是唯一一个动 `server/` 的**，
+   必须重启 stronghold 才生效）；
 5. 启动，跑 `custom/diag/` 下的脚本回归（许愿 60 局、进对局、WebSocket、首屏流量、
    在线徽标、看板）。
    `custom/stats/` 是 nginx 旁路的独立目录（不在游戏目录内），**升级 update 包不会碰到它**，
@@ -54,6 +62,8 @@ custom/
 ├── wish.patch / apply-wish.sh              # 阵营许愿（7 文件）
 ├── damage-board.patch / apply-damage-board.sh   # 伤害统计面板（4 文件）
 ├── online-count.patch / apply-online-count.sh   # 在线人数徽标（3 文件）
+├── addr-limits.patch / apply-addr-limits.sh     # 同 IP 上限可环境变量覆盖（唯一动 server/ 的）
+│   └── addr-limits.systemd.conf                 #   数值 drop-in（512 / 64 / 32）
 ├── stats/                                  # 运营看板（nginx 旁路，独立于游戏目录）
 │   ├── index.html                          #   看板页面（4 卡片 + 今日统计 + 24h 曲线）
 │   ├── sample.py                           #   每分钟采一次 /healthz，写 NDJSON（保留 30 天）
