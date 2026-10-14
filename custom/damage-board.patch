@@ -1,0 +1,198 @@
+diff -ruN old/public/css/screens/game.css new/public/css/screens/game.css
+--- old/public/css/screens/game.css	2026-10-14 01:56:28.894228700 +0800
++++ new/public/css/screens/game.css	2026-10-14 01:56:29.220155900 +0800
+@@ -476,6 +476,48 @@
+ }
+ .dpbox__icon { width: .26rem; height: .26rem; color: var(--mint-500); }
+ .dpbox b { font-size: .34rem; line-height: 1; color: #fff; }
++
++/* ── 实时伤害统计（本机定制功能，ui/damageBoard.js）─────────────────────────────
++   右侧竖排面板：与 .gm__effects / .dpbox 同靠右，避让它们所在的顶部与中部。
++   bottom 留出商店的高度；商店展开时（.is-shop）再抬高，避免压住 ShopBar。 */
++.dmgb {
++  position: absolute; right: .3rem; bottom: 5rem; z-index: 8;
++  width: 5.4rem; max-height: 38vh; display: flex; flex-direction: column;
++  background: rgba(8, 11, 10, .85); border: 1px solid var(--line-2); border-right: 3px solid var(--mint-500);
++  font-size: .26rem; overflow: hidden;
++}
++.dmgb.is-shop { bottom: 7.6rem; }
++.dmgb__head {
++  display: flex; align-items: center; gap: .1rem; width: 100%;
++  padding: .12rem .16rem; background: transparent; border: 0; border-bottom: 1px solid var(--line-2);
++  color: var(--text-hi); cursor: pointer; text-align: left;
++}
++.dmgb__head:hover { background: rgba(255, 255, 255, .05); }
++.dmgb__head > svg, .dmgb__head > i { width: .24rem; height: .24rem; flex: 0 0 auto; color: var(--mint-500); }
++.dmgb__caret { transition: transform var(--t-fast) var(--ease-out); }
++.dmgb.is-open .dmgb__caret { transform: rotate(-90deg); }
++.dmgb__title { flex: 1 1 auto; letter-spacing: .04em; }
++.dmgb__head b { font-size: .32rem; line-height: 1; color: var(--mint-500); }
++.dmgb:not(.is-open) .dmgb__head { border-bottom: 0; }
++.dmgb__list { margin: 0; padding: .06rem 0; list-style: none; overflow-y: auto; }
++.dmgb__row {
++  display: flex; align-items: center; gap: .1rem; padding: .07rem .16rem;
++  border-left: 2px solid transparent;
++}
++.dmgb__row:nth-child(odd) { background: rgba(255, 255, 255, .028); }
++.dmgb__name {
++  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
++  color: var(--text-hi);
++}
++.dmgb__row .num { flex: 0 0 auto; font-size: .28rem; color: #fff; }
++.dmgb__row.is-mate { border-left-color: rgba(255, 255, 255, .22); }
++.dmgb__row.is-mate .dmgb__name { color: var(--text-mid); }
++.dmgb__row.is-down { opacity: .45; }
++.dmgb__row.is-down .dmgb__name { text-decoration: line-through; }
++.dmgb__empty, .dmgb__note {
++  margin: 0; padding: .12rem .16rem; font-size: .22rem; color: var(--text-mid);
++}
++.dmgb__note { border-top: 1px solid var(--line-2); opacity: .75; }
+ .chud__bottom { position: absolute; left: 50%; bottom: .3rem; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: .12rem; pointer-events: none; }
+ .chud__bottom > * { pointer-events: auto; }
+ .chud__msg {
+diff -ruN old/public/js/battle/runner.js new/public/js/battle/runner.js
+--- old/public/js/battle/runner.js	2026-10-14 01:56:28.613422800 +0800
++++ new/public/js/battle/runner.js	2026-10-14 01:56:29.166154200 +0800
+@@ -858,6 +858,56 @@
+       try { return unitStatsEntry(u, u._s || null); } catch { return null; }
+     },
+     /**
++     * 本机模拟的实时伤害统计：战场上所有己方干员（自己的 + 队友的）本局累计造成的伤害，按数值降序。
++     *
++     * 只读 `unit.stats.dmg` —— 那是 sim/damage.js 里纯记账的数字字段，不是 getter（读它不会触发
++     * units.js 的 `_recalc()`），既不消耗 battle.rng，也不新增任何 _ev / fx / emit 调用，
++     * 因此完全不影响确定性模拟与联机同步。口径与官方结算页「造成伤害」一致：只计从敌方身上扣掉的 HP，
++     * 自有伤害、友伤、流失均不计入。
++     * @param {string|null} [fieldId] @param {string|null} [myId]
++     * @param {{ min?: number, limit?: number }} [o] min: 只列出伤害 ≥ min 的；limit: 最多几条，0 = 不限
++     */
++    damageBoard(fieldId = null, myId = null, { min = 0, limit = 12 } = {}) {
++      const e = cur;
++      if (!e || (fieldId != null && e.fieldId !== fieldId)) return [];
++      let list;
++      try { list = Array.isArray(e.battle.allyUnits) ? e.battle.allyUnits : []; } catch { return []; }
++      const out = [];
++      for (const u of list) {
++        if (!u || u.kind !== 'op') continue;
++        const st = u.stats;
++        const dmg = st && Number.isFinite(st.dmg) ? st.dmg : 0;
++        if (dmg < min) continue;
++        out.push({
++          id: u.id,
++          uid: u.uid,
++          defId: typeof u.defId === 'string' ? u.defId : null,
++          name: typeof u.name === 'string' && u.name ? u.name : null,
++          ownerId: typeof u.ownerId === 'string' ? u.ownerId : null,
++          self: myId != null && u.ownerId === myId,
++          alive: !!u.alive,
++          dmg: Math.round(dmg),
++          kills: st && Number.isFinite(st.kills) ? st.kills : 0,
++          taken: st && Number.isFinite(st.taken) ? Math.round(st.taken) : 0,
++        });
++      }
++      out.sort((a, b) => b.dmg - a.dmg || (a.id | 0) - (b.id | 0));
++      return limit > 0 ? out.slice(0, limit) : out;
++    },
++    /** Test / debug hook: the raw ally unit list of the battle on screen (伤害统计面板的排障用). */
++    _dbgAllies() {
++      const e = cur;
++      if (!e || !e.battle) return null;
++      const list = Array.isArray(e.battle.allyUnits) ? e.battle.allyUnits : [];
++      return {
++        fieldId: e.fieldId, time: Math.round(Number(e.battle.time) || 0), finished: !!e.battle.finished, n: list.length,
++        units: list.slice(0, 14).map((u) => ({
++          id: u.id, kind: u.kind, name: u.name, defId: u.defId, alive: !!u.alive, deployed: !!u.deployed,
++          dmg: u.stats && Number.isFinite(u.stats.dmg) ? Math.round(u.stats.dmg) : null,
++        })),
++      };
++    },
++    /**
+      * The unit id of the board piece `uid` owned by `ownerId` in the battle on screen (an own operator's card opened in
+      * prep and left open into the battle turns live); null when that battle has no such unit.
+      * @param {number} uid @param {string} ownerId @param {string|null} [fieldId]
+diff -ruN old/public/js/screens/game.js new/public/js/screens/game.js
+--- old/public/js/screens/game.js	2026-10-14 01:56:28.426146600 +0800
++++ new/public/js/screens/game.js	2026-10-14 01:56:29.195147900 +0800
+@@ -78,6 +78,7 @@
+ import { TeamPanel } from '../ui/teamPanel.js';
+ import { ShopBar } from '../ui/shopBar.js';
+ import { DetailPanel, resolveDetail } from '../ui/detailPanel.js';
++import { DamageBoard } from '../ui/damageBoard.js';
+ import { RewardOverlay } from '../ui/rewardOverlay.js';
+ import { ChoiceOverlay } from '../ui/choiceOverlay.js';
+ import { EnemyDrawer } from '../ui/enemyDrawer.js';
+@@ -1484,6 +1485,8 @@
+ 
+       <div class="gm__effects"><${EffectsList} effects=${watchingOther && field ? (field.effects ?? null) : priv?.effects} /></div>
+ 
++      ${combat && cc && field?.local ? html`<${DamageBoard} fieldId=${field.fieldId} myId=${myId} shopOpen=${!!showShop} />` : null}
++
+       ${watchingOther && !combat ? html`<div class="gm__watching" role="status">
+         <${GIcon} name="eye" /><span>${tParts('正在查看 {name} 的阵地（只读）', { name: html`<b>${watchedName}</b>` })}</span>
+         ${spectator ? null : html`<${Button} size="sm" variant="primary" icon="back" onClick=${() => watchPlayer({ playerId: myId })}>${t('返回自己')}<//>`}
+diff -ruN old/public/js/ui/damageBoard.js new/public/js/ui/damageBoard.js
+--- old/public/js/ui/damageBoard.js	1970-01-01 08:00:00.000000000 +0800
++++ new/public/js/ui/damageBoard.js	2026-10-14 01:56:29.243666200 +0800
+@@ -0,0 +1,61 @@
++// 实时伤害统计（右侧面板 · 本机定制功能）
++//
++// 本局战斗中，按干员列出累计造成的伤害，数字随战斗实时跳动。它读的是本机浏览器里
++// `unit.stats.dmg`（sim/damage.js 的纯记账字段），不上报服务端 —— 所以联机时每位玩家看到的
++// 是自己这一侧视角的同一场战斗，数据不会跨端同步（也不需要：对局结果由官方的结算页负责）。
++//
++// 口径与官方结算页「造成伤害」一致：只计从敌方身上扣掉的 HP；自有伤害、友伤、流失都不计入。
++
++import { html, Icon, useTicker } from './components.js';
++import { useState } from '../../vendor/hooks.module.js';
++import { battleRunner } from '../battle/runner.js';
++import { t } from '../../../shared/i18n.js';
++
++const cx = (...p) => p.flat().filter(Boolean).join(' ');
++
++/** 伤害数值：过万折成「x.xx万」，其余千分位。 */
++const fmt = (n) => {
++  const v = Math.max(0, Math.round(Number(n) || 0));
++  return v >= 100000 ? `${Math.round(v / 1000) / 100}万` : v.toLocaleString('en-US');
++};
++
++/**
++ * @param {{ fieldId?: string|null, myId?: string|null, shopOpen?: boolean, enabled?: boolean }} props
++ *   fieldId: 当前显示的战场（只统计这一场，避免切到队友视角时混入别人的数字）
++ *   myId:   用来标出自己的干员
++ *   enabled: false 时完全不渲染（设置里关掉）
++ */
++export function DamageBoard({ fieldId = null, myId = null, shopOpen = false, enabled = true }) {
++  const [open, setOpen] = useState(true);
++  // 只在展开时按 400ms 重绘；折叠时（0）停止，避免空转
++  useTicker(open ? 400 : 0);
++
++  if (!enabled || !battleRunner) return null;
++
++  let rows = [];
++  try { rows = battleRunner.damageBoard(fieldId, myId, { min: 1, limit: 12 }); } catch { rows = []; }
++  if (!rows.length && !open) return null;
++
++  const total = rows.reduce((s, r) => s + r.dmg, 0);
++  const mates = rows.some((r) => !r.self);
++
++  return html`
++    <div class=${cx('dmgb', open && 'is-open', shopOpen && 'is-shop')} role="region" aria-label=${t('伤害统计')}>
++      <button type="button" class="dmgb__head" aria-expanded=${open ? 'true' : 'false'}
++        onClick=${() => setOpen((v) => !v)}>
++        <${Icon} name="chevronRight" class="dmgb__caret" />
++        <span class="dmgb__title">${t('伤害统计')}<//>
++        <b class="num">${fmt(total)}<//>
++      <//>
++      ${open ? (rows.length ? html`
++        <ol class="dmgb__list">
++          ${rows.map((r) => html`
++            <li key=${r.id} class=${cx('dmgb__row', !r.self && 'is-mate', !r.alive && 'is-down')}
++                title=${t('造成伤害 {d}', { d: fmt(r.dmg) })}>
++              <span class="dmgb__name">${r.name || t('干员')}<//>
++              <span class="num">${fmt(r.dmg)}<//>
++            <//>`)}
++        </ol>` : html`<p class="dmgb__empty">${t('尚无伤害记录')}<//>`) : null}
++      ${open && mates ? html`<p class="dmgb__note">${t('含队友')}<//>` : null}
++    </div>`;
++}
+\ No newline at end of file

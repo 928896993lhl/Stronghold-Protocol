@@ -858,6 +858,56 @@ export function createBattleRunner(deps) {
       try { return unitStatsEntry(u, u._s || null); } catch { return null; }
     },
     /**
+     * 本机模拟的实时伤害统计：战场上所有己方干员（自己的 + 队友的）本局累计造成的伤害，按数值降序。
+     *
+     * 只读 `unit.stats.dmg` —— 那是 sim/damage.js 里纯记账的数字字段，不是 getter（读它不会触发
+     * units.js 的 `_recalc()`），既不消耗 battle.rng，也不新增任何 _ev / fx / emit 调用，
+     * 因此完全不影响确定性模拟与联机同步。口径与官方结算页「造成伤害」一致：只计从敌方身上扣掉的 HP，
+     * 自有伤害、友伤、流失均不计入。
+     * @param {string|null} [fieldId] @param {string|null} [myId]
+     * @param {{ min?: number, limit?: number }} [o] min: 只列出伤害 ≥ min 的；limit: 最多几条，0 = 不限
+     */
+    damageBoard(fieldId = null, myId = null, { min = 0, limit = 12 } = {}) {
+      const e = cur;
+      if (!e || (fieldId != null && e.fieldId !== fieldId)) return [];
+      let list;
+      try { list = Array.isArray(e.battle.allyUnits) ? e.battle.allyUnits : []; } catch { return []; }
+      const out = [];
+      for (const u of list) {
+        if (!u || u.kind !== 'op') continue;
+        const st = u.stats;
+        const dmg = st && Number.isFinite(st.dmg) ? st.dmg : 0;
+        if (dmg < min) continue;
+        out.push({
+          id: u.id,
+          uid: u.uid,
+          defId: typeof u.defId === 'string' ? u.defId : null,
+          name: typeof u.name === 'string' && u.name ? u.name : null,
+          ownerId: typeof u.ownerId === 'string' ? u.ownerId : null,
+          self: myId != null && u.ownerId === myId,
+          alive: !!u.alive,
+          dmg: Math.round(dmg),
+          kills: st && Number.isFinite(st.kills) ? st.kills : 0,
+          taken: st && Number.isFinite(st.taken) ? Math.round(st.taken) : 0,
+        });
+      }
+      out.sort((a, b) => b.dmg - a.dmg || (a.id | 0) - (b.id | 0));
+      return limit > 0 ? out.slice(0, limit) : out;
+    },
+    /** Test / debug hook: the raw ally unit list of the battle on screen (伤害统计面板的排障用). */
+    _dbgAllies() {
+      const e = cur;
+      if (!e || !e.battle) return null;
+      const list = Array.isArray(e.battle.allyUnits) ? e.battle.allyUnits : [];
+      return {
+        fieldId: e.fieldId, time: Math.round(Number(e.battle.time) || 0), finished: !!e.battle.finished, n: list.length,
+        units: list.slice(0, 14).map((u) => ({
+          id: u.id, kind: u.kind, name: u.name, defId: u.defId, alive: !!u.alive, deployed: !!u.deployed,
+          dmg: u.stats && Number.isFinite(u.stats.dmg) ? Math.round(u.stats.dmg) : null,
+        })),
+      };
+    },
+    /**
      * The unit id of the board piece `uid` owned by `ownerId` in the battle on screen (an own operator's card opened in
      * prep and left open into the battle turns live); null when that battle has no such unit.
      * @param {number} uid @param {string} ownerId @param {string|null} [fieldId]

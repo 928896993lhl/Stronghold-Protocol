@@ -78,6 +78,7 @@ import { BondStrip, BondPopup } from '../ui/bondStrip.js';
 import { TeamPanel } from '../ui/teamPanel.js';
 import { ShopBar } from '../ui/shopBar.js';
 import { DetailPanel, resolveDetail } from '../ui/detailPanel.js';
+import { DamageBoard } from '../ui/damageBoard.js';
 import { RewardOverlay } from '../ui/rewardOverlay.js';
 import { ChoiceOverlay } from '../ui/choiceOverlay.js';
 import { EnemyDrawer } from '../ui/enemyDrawer.js';
@@ -1483,6 +1484,8 @@ function MatchScreen() {
         observe=${cc ? { canObserve: (p) => observeTarget(p, pub, myId, { observing: watchingOther, ownDone: localDone }), observing: watchingOther, onBack: backHome } : null} />
 
       <div class="gm__effects"><${EffectsList} effects=${watchingOther && field ? (field.effects ?? null) : priv?.effects} /></div>
+
+      ${combat && cc && field?.local ? html`<${DamageBoard} fieldId=${field.fieldId} myId=${myId} shopOpen=${!!showShop} />` : null}
 
       ${watchingOther && !combat ? html`<div class="gm__watching" role="status">
         <${GIcon} name="eye" /><span>${tParts('正在查看 {name} 的阵地（只读）', { name: html`<b>${watchedName}</b>` })}</span>

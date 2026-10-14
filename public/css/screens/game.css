@@ -476,6 +476,48 @@
 }
 .dpbox__icon { width: .26rem; height: .26rem; color: var(--mint-500); }
 .dpbox b { font-size: .34rem; line-height: 1; color: #fff; }
+
+/* ── 实时伤害统计（本机定制功能，ui/damageBoard.js）─────────────────────────────
+   右侧竖排面板：与 .gm__effects / .dpbox 同靠右，避让它们所在的顶部与中部。
+   bottom 留出商店的高度；商店展开时（.is-shop）再抬高，避免压住 ShopBar。 */
+.dmgb {
+  position: absolute; right: .3rem; bottom: 5rem; z-index: 8;
+  width: 5.4rem; max-height: 38vh; display: flex; flex-direction: column;
+  background: rgba(8, 11, 10, .85); border: 1px solid var(--line-2); border-right: 3px solid var(--mint-500);
+  font-size: .26rem; overflow: hidden;
+}
+.dmgb.is-shop { bottom: 7.6rem; }
+.dmgb__head {
+  display: flex; align-items: center; gap: .1rem; width: 100%;
+  padding: .12rem .16rem; background: transparent; border: 0; border-bottom: 1px solid var(--line-2);
+  color: var(--text-hi); cursor: pointer; text-align: left;
+}
+.dmgb__head:hover { background: rgba(255, 255, 255, .05); }
+.dmgb__head > svg, .dmgb__head > i { width: .24rem; height: .24rem; flex: 0 0 auto; color: var(--mint-500); }
+.dmgb__caret { transition: transform var(--t-fast) var(--ease-out); }
+.dmgb.is-open .dmgb__caret { transform: rotate(-90deg); }
+.dmgb__title { flex: 1 1 auto; letter-spacing: .04em; }
+.dmgb__head b { font-size: .32rem; line-height: 1; color: var(--mint-500); }
+.dmgb:not(.is-open) .dmgb__head { border-bottom: 0; }
+.dmgb__list { margin: 0; padding: .06rem 0; list-style: none; overflow-y: auto; }
+.dmgb__row {
+  display: flex; align-items: center; gap: .1rem; padding: .07rem .16rem;
+  border-left: 2px solid transparent;
+}
+.dmgb__row:nth-child(odd) { background: rgba(255, 255, 255, .028); }
+.dmgb__name {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--text-hi);
+}
+.dmgb__row .num { flex: 0 0 auto; font-size: .28rem; color: #fff; }
+.dmgb__row.is-mate { border-left-color: rgba(255, 255, 255, .22); }
+.dmgb__row.is-mate .dmgb__name { color: var(--text-mid); }
+.dmgb__row.is-down { opacity: .45; }
+.dmgb__row.is-down .dmgb__name { text-decoration: line-through; }
+.dmgb__empty, .dmgb__note {
+  margin: 0; padding: .12rem .16rem; font-size: .22rem; color: var(--text-mid);
+}
+.dmgb__note { border-top: 1px solid var(--line-2); opacity: .75; }
 .chud__bottom { position: absolute; left: 50%; bottom: .3rem; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: .12rem; pointer-events: none; }
 .chud__bottom > * { pointer-events: auto; }
 .chud__msg {
