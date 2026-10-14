@@ -115,3 +115,19 @@ index 20e491a..68131f7 100644
      const seats = room.seats.filter(Boolean).map((s) => ({
        seat: s.seat, playerId: s.playerId, name: s.name, isBot: s.isBot, connected: s.connected,
        // DESIGN §16: the human's checked operator loadout and (0.2.2) per-operator 潜能 / 练度 (bots fight with the defaults)
+diff --git a/shared/protocol.js b/shared/protocol.js
+index d1c0f64..ec08dbf 100644
+--- a/shared/protocol.js
++++ b/shared/protocol.js
+@@ -412,6 +412,11 @@ export const C2S = {
+   ping: { c: (v) => typeof v === 'number' && Number.isFinite(v) },
+   'room.create': { mode: (v) => v === 'solo' || v === 'coop', difficulty: (v) => DIFFICULTIES.includes(v) },
+   'room.join': { code: (v) => isStr(v, ROOM_CODE_LEN + 2) && /^[A-Za-z0-9]+$/.test(v) },
++  // 快速匹配 (remake option): drop into an open room asking for the same mode + difficulty, or open one and wait —
++  // the fields are room.create's, so a stranger needs no alliance key (server/lobby.js quickMatch).
++  // room.setOpen is the host's switch for the same thing, before the match only; a solo room takes no strangers.
++  'room.quickMatch': { mode: (v) => v === 'solo' || v === 'coop', difficulty: (v) => DIFFICULTIES.includes(v) },
++  'room.setOpen': { open: isBool },
+   'room.leave': {},
+   'room.ready': { ready: isBool },
+   'room.setDifficulty': { difficulty: (v) => DIFFICULTIES.includes(v) },

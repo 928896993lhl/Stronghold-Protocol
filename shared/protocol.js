@@ -412,6 +412,11 @@ export const C2S = {
   ping: { c: (v) => typeof v === 'number' && Number.isFinite(v) },
   'room.create': { mode: (v) => v === 'solo' || v === 'coop', difficulty: (v) => DIFFICULTIES.includes(v) },
   'room.join': { code: (v) => isStr(v, ROOM_CODE_LEN + 2) && /^[A-Za-z0-9]+$/.test(v) },
+  // 快速匹配 (remake option): drop into an open room asking for the same mode + difficulty, or open one and wait —
+  // the fields are room.create's, so a stranger needs no alliance key (server/lobby.js quickMatch).
+  // room.setOpen is the host's switch for the same thing, before the match only; a solo room takes no strangers.
+  'room.quickMatch': { mode: (v) => v === 'solo' || v === 'coop', difficulty: (v) => DIFFICULTIES.includes(v) },
+  'room.setOpen': { open: isBool },
   'room.leave': {},
   'room.ready': { ready: isBool },
   'room.setDifficulty': { difficulty: (v) => DIFFICULTIES.includes(v) },
