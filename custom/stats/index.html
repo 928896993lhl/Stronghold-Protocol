@@ -65,7 +65,7 @@
   <div class="cards">
     <div class="card"><span>在线玩家</span><b id="v-online">–</b><small id="s-sub">活着的 WebSocket 连接</small></div>
     <div class="card"><span>进行中对局</span><b id="v-matches">–</b><small>含断线后残留的房间</small></div>
-    <div class="card"><span>房间</span><b id="v-rooms">–</b><small id="r-sub">含中断后未回收的对局，不回落</small></div>
+    <div class="card"><span>房间</span><b id="v-rooms">–</b><small id="r-sub">独立模拟弃局保留 24 h 后自动清</small></div>
     <div class="card"><span>可恢复会话</span><b id="v-sessions">–</b><small>断线后仍保留，不是在线数</small></div>
   </div>
 
@@ -84,6 +84,7 @@
 
   <footer>
     <div>服务端活体数据：<code>GET /healthz</code>；历史：<code>data/YYYY-MM-DD.ndjson</code>（每分钟一行）。</div>
+    <div>房间/会话不是在线数：组队房间掉线 10 分钟后自动清；独立模拟按官方 <code>singleReconnectTime</code> 保留 24 小时才清。房间数上限 <code>maxRooms=1000</code>。</div>
     <div>本站为非官方同人作品，与上海鹰角网络 / Yostar 无关，严禁任何形式的盈利。</div>
   </footer>
 </div>
