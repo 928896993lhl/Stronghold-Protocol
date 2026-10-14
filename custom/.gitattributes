@@ -1,0 +1,8 @@
+# 上游 .gitattributes 已覆盖 .sh/.py/.js/.css/.md；这里补齐 custom/ 里其余文本类型。
+# 若不锁定，Windows checkout（* text=auto 兜底）会得到 CRLF：patch 应用到服务器会失败，
+# nginx conf 会语法错误，凭据模板也会带 ^M。只列扩展名、不写 `* text eol=lf`，
+# 是为了不覆盖上游的 `*.woff2 binary`（字体二进制哪天入库时不能被当文本换行）。
+*.patch    text eol=lf
+*.conf     text eol=lf
+*.cjs      text eol=lf
+*.example  text eol=lf
