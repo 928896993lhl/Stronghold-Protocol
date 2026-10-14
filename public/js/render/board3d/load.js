@@ -40,15 +40,29 @@ export function loadThree(url = THREE_URL) {
 /**
  * Can this browser run the 3D board? (WebGL2 — three r163+ requires it.) Software / blocklisted GPUs ("major
  * performance caveat") count as unavailable unless `allowSlow` (an explicit `?board=3d`).
+ *
+ * The probe context is KEPT for the life of the page (at most two: one strict, one allowing software rendering).
+ * It used to be created — and thrown away — on every call: `loseContext()` is asynchronous and does nothing when
+ * `WEBGL_lose_context` is missing, so repeated calls piled up contexts until the browser hit its budget
+ * (Chrome ≈ 16). From then on `getContext('webgl2')` returns null whatever the attributes are, the probe reported
+ * "unsupported", and the 3D board fell back to 2D — even with `?board=3d`, which only clears the performance
+ * caveat and cannot lift the budget. A page reload cleared it (remake fix).
  */
+let probeStrict = null; // proven without the performance caveat
+let probeSlow = null;   // proven allowing software rendering (a strict pass counts as one)
+const forgetProbes = () => { probeStrict = null; probeSlow = null; };
+
 export function webgl2Available(allowSlow = false) {
   try {
     if (typeof document === 'undefined') return false;
+    if (allowSlow ? probeSlow : probeStrict) return true;
     const c = document.createElement('canvas');
     const gl = c.getContext('webgl2', allowSlow ? {} : { failIfMajorPerformanceCaveat: true });
     if (!gl) return false;
-    const lose = gl.getExtension('WEBGL_lose_context');
-    if (lose) lose.loseContext();
+    // a lost context (GPU reset) invalidates the proof: the next call probes again
+    c.addEventListener('webglcontextlost', forgetProbes, { once: true });
+    if (allowSlow) probeSlow = gl;
+    else { probeStrict = gl; probeSlow = gl; }
     return true;
   } catch { return false; }
 }

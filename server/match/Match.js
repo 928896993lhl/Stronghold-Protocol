@@ -327,8 +327,16 @@ export class Match {
     this.factions = setup.factions;
     this.bossId = setup.bossId;
     this.hiddenBossId = setup.hiddenBossId;
-    const bans = drawDisabledBonds(this.gd, this.rngSetup);
+    // 阵营许愿 (remake option): the bonds the seats wished for, deduplicated (two seats may name the same one) —
+    // the match never disables them. Empty when nobody wished: the draw is then exactly as before.
+    const wished = [];
+    for (const s of opts.seats) {
+      if (s && typeof s.wish === 'string' && s.wish && !wished.includes(s.wish)) wished.push(s.wish);
+    }
+    const bans = drawDisabledBonds(this.gd, this.rngSetup, wished);
     this.disabledBonds = bans.drawn;
+    /** 阵营许愿: the wished bonds honoured this match (a subset of `wished`; see server/match/pool.js). */
+    this.protectedBonds = bans.protected;
     this.staticInactiveBonds = bans.staticOff;
     this.bannedChess = bans.banned;
     this.pool = new SharedPool(this.gd, { banned: bans.banned });

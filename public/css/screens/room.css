@@ -313,3 +313,69 @@
 .ready-count__icons .icon.is-on { color: var(--mint-400); filter: drop-shadow(0 0 4px var(--mint-glow)); }
 
 .room-bar .btn--xl { min-width: 3.2rem; letter-spacing: .2em; }
+
+/* ---- 阵营许愿 (remake option): a seat's wished core bond, and the picker of the eight core bonds ---- */
+.wish { align-self: stretch; display: flex; flex-direction: column; align-items: stretch; gap: .05rem; }
+.wish__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .06rem;
+  width: 100%;
+  padding: .03rem .08rem;
+  background: rgba(255, 255, 255, .03);
+  border: 1px dashed var(--line-3);
+  color: var(--text-lo);
+  font-size: .15rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  cursor: pointer;
+  transition: color var(--t-fast), background-color var(--t-fast), border-color var(--t-fast);
+}
+.wish__btn:hover:not(:disabled) { color: var(--text-hi); background: rgba(255, 255, 255, .06); border-color: var(--line-2); }
+.wish__btn:disabled { cursor: default; }
+.wish__btn.is-set { border-style: solid; border-color: rgba(23, 249, 183, .45); background: rgba(23, 249, 183, .08); color: var(--mint-400); }
+.wish__icon { flex: none; width: .2rem; height: .2rem; object-fit: contain; }
+.wish__dot { flex: none; width: .2rem; height: .2rem; background: var(--line-3); border-radius: 50%; }
+.wish__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wish__caret { flex: none; width: .14rem; height: .14rem; opacity: .6; transform: rotate(90deg); transition: transform var(--t-fast); }
+.wish.is-open .wish__caret { transform: rotate(-90deg); }
+.wish__panel {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: .04rem;
+  padding: .06rem;
+  background: rgba(11, 14, 13, .96);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 .1rem .26rem rgba(0, 0, 0, .5);
+}
+.wish__opt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .03rem;
+  padding: .05rem .02rem;
+  background: rgba(255, 255, 255, .03);
+  border: 1px solid transparent;
+  color: var(--text-md);
+  font-size: .12rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color var(--t-fast), background-color var(--t-fast), border-color var(--t-fast);
+}
+.wish__opt:hover:not(:disabled) { color: var(--text-hi); background: rgba(255, 255, 255, .07); }
+.wish__opt:disabled { cursor: default; opacity: .5; }
+.wish__opt.is-active { color: var(--mint-400); border-color: rgba(23, 249, 183, .5); background: rgba(23, 249, 183, .1); }
+.wish__opt .wish__icon { width: .24rem; height: .24rem; }
+.wish__opt span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wish__opt--clear { grid-column: 1 / -1; color: var(--text-lo); }
+.wish__note {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--text-lo);
+  font-size: .11rem;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: 0;
+  text-align: left;
+}

@@ -23,11 +23,21 @@
  * Per-match disabled bond set D and banned chess (research 01 A2): D = uniform sample of `core` core bonds and `addon`
  * add-on bonds among weight > 0 bonds that are active in the mode. A visible chess is banned iff every one of its
  * bonds is in D ∪ mode.inactiveBondIds.
+ *
+ * 阵营许愿 (remake option, off by default): `protect` names the bonds the room's seats wished for. A protected core
+ * bond is never drawn into D, so it stays playable this match. Notes on what that does and does not mean:
+ *   * the ban is ONE set for the whole match, so a wish protects the alliance, not only its own board;
+ *   * a chess is still banned when its *other* bonds are all off — protection covers the bond, not its operators;
+ *   * nothing is promised to be offered: the shared pool stays random, the wish only rules the bond out of the ban;
+ *   * core bonds only (data/bonds.json `isCore`, 8 of them), and never more than the draw can spare (8 core with 3
+ *     banned ⇒ at most 5 honoured, and 4 seats can name 4 at most) — the difficulty keeps its banned-bond count.
+ * With `protect` absent or empty (the normal case, and every test) the draw is exactly as before.
  * @param {import('./gamedata.js').GameData} gd
  * @param {Function} rng seeded rng (createRng)
- * @returns {{ drawn: string[], staticOff: string[], banned: string[] }}
+ * @param {Iterable<string> | null} [protect] bond ids kept out of the draw (阵营许愿)
+ * @returns {{ drawn: string[], staticOff: string[], banned: string[], protected: string[] }}
  */
-export function drawDisabledBonds(gd, rng) {
+export function drawDisabledBonds(gd, rng, protect = null) {
   const { core: nCore, addon: nAddon } = gd.bans(gd.difficulty);
   const staticOff = [...gd.modeInactiveBonds].filter((b) => gd.bond(b)).sort();
   const eligible = gd.bondIds.filter((b) => {
@@ -36,7 +46,13 @@ export function drawDisabledBonds(gd, rng) {
   });
   const core = eligible.filter((b) => gd.bond(b).isCore);
   const addon = eligible.filter((b) => !gd.bond(b).isCore);
-  const drawn = [...sample(core, nCore, rng), ...sample(addon, nAddon, rng)].sort();
+  const wished = new Set();
+  if (protect) for (const b of protect) if (typeof b === 'string') wished.add(b);
+  // honoured in core order (data order), never more than `spare`: that keeps nCore bonds to ban
+  const spare = Math.max(0, core.length - nCore);
+  const kept = core.filter((b) => wished.has(b)).slice(0, spare);
+  const shield = new Set(kept);
+  const drawn = [...sample(core.filter((b) => !shield.has(b)), nCore, rng), ...sample(addon, nAddon, rng)].sort();
   const off = new Set([...drawn, ...staticOff]);
   const banned = [];
   for (const id of gd.visibleChess) {
@@ -44,7 +60,7 @@ export function drawDisabledBonds(gd, rng) {
     const bonds = Array.isArray(c.bonds) ? c.bonds : [];
     if (bonds.length > 0 && bonds.every((b) => off.has(b))) banned.push(id);
   }
-  return { drawn, staticOff, banned };
+  return { drawn, staticOff, banned, protected: kept.slice().sort() };
 }
 
 function sample(arr, n, rng) {

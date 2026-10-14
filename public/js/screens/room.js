@@ -23,6 +23,9 @@ import { openStats } from './stats.js';
 import { SettingsButton } from '../ui/settings.js';
 import { LoadoutButton } from './loadout.js';
 import { net } from '../net.js';
+import { useData, data } from '../data.js';
+import { bondIconUrl } from '../ui/assetUrls.js';
+import { Img } from '../ui/gameComponents.js';
 import { store, useStore, shallowEqual, emptyMatch, isSpectating } from '../store.js';
 import { difficultyInfo } from './lobby.js';
 import { t, tc } from '../../../shared/i18n.js';
@@ -99,7 +102,7 @@ export function inviteLink(code) {
  */
 export { copyText };
 
-function SeatCard({ seat, index, room, facts, myId, busy, onAddBot, onRemoveBot, onKick }) {
+function SeatCard({ seat, index, room, facts, myId, busy, onAddBot, onRemoveBot, onKick, onWish, wishBusy }) {
   const coop = room.mode !== 'solo';
   if (!seat) {
     const canAdd = coop && facts.isHost;
@@ -138,6 +141,7 @@ function SeatCard({ seat, index, room, facts, myId, busy, onAddBot, onRemoveBot,
       <span class="seat__name">${seat.name || t('博士')}</span>
       ${isMe ? html`<span class="seat__you">${t('你')}</span>` : null}
     </div>
+    ${seat.isBot ? null : html`<${WishRow} seat=${seat} isMe=${isMe} busy=${wishBusy} onPick=${onWish} />`}
     <${MicroLabel}>${seat.isBot ? 'AUTONOMOUS UNIT' : `DOCTOR #${doctorNo(seat.playerId)}`}<//>
     <footer class="seat__foot">
       <span class=${`seat__state seat__state--${state}`}>
@@ -154,6 +158,50 @@ function SeatCard({ seat, index, room, facts, myId, busy, onAddBot, onRemoveBot,
       <//>` : null}
     </footer>
   </article>`;
+}
+
+/**
+ * 阵营许愿 (remake option): the bonds a seat may wish for — the core ones (data/bonds.json `isCore`, 8 of them).
+ * The match never disables a wished bond, and because the disabled set is one set for the whole match the wish
+ * protects the alliance, not only its own board. It promises nothing about what the shared pool offers: the wish only
+ * rules the bond out of the ban.
+ * @returns {{ bondId: string, name: string }[]}
+ */
+export function wishableBonds() {
+  const list = Array.isArray(data.list('bonds')) ? data.list('bonds') : [];
+  return list.filter((b) => b && typeof b.bondId === 'string' && b.isCore).map((b) => ({ bondId: b.bondId, name: b.name || b.bondId }));
+}
+
+/**
+ * 阵营许愿 row of a seat card: the wished bond (its icon and name), or 许愿阵营 for a seat that has none. The local
+ * player's seat opens a picker of the core bonds (plus 清除许愿); everyone else's is read-only. A bot has none.
+ */
+function WishRow({ seat, isMe, busy, onPick }) {
+  const [open, setOpen] = useState(false);
+  const bonds = wishableBonds();
+  const m = data.get('assets');
+  const cur = typeof seat.wish === 'string' && seat.wish ? seat.wish : null;
+  const rec = cur ? data.lookup('bonds', cur) : null;
+  if (!isMe && !cur) return null;
+  const pick = (bondId) => { setOpen(false); if (bondId !== cur) onPick(bondId); };
+  return html`<div class=${`wish${open ? ' is-open' : ''}`}>
+    <button type="button" class=${`wish__btn${cur ? ' is-set' : ''}`} disabled=${!isMe || !!busy}
+      aria-expanded=${open ? 'true' : 'false'} onClick=${() => isMe && setOpen(!open)}>
+      ${cur
+        ? html`<${Img} src=${bondIconUrl(m, cur)} class="wish__icon" fallback=${html`<i class="wish__dot"></i>`} />`
+        : html`<${Icon} name="plus" class="wish__icon" />`}
+      <span class="wish__text">${cur ? (rec?.name || cur) : t('许愿阵营')}</span>
+      ${isMe ? html`<${Icon} name="chevronRight" class="wish__caret" />` : null}
+    </button>
+    ${open && isMe ? html`<div class="wish__panel" role="radiogroup" aria-label=${t('许愿阵营')}>
+      ${bonds.map((b) => html`<button key=${b.bondId} type="button" role="radio" aria-checked=${cur === b.bondId ? 'true' : 'false'}
+          class=${`wish__opt${cur === b.bondId ? ' is-active' : ''}`} disabled=${!!busy} onClick=${() => pick(b.bondId)}>
+        <${Img} src=${bondIconUrl(m, b.bondId)} class="wish__icon" fallback=${html`<i class="wish__dot"></i>`} /><span>${b.name}</span>
+      </button>`)}
+      ${cur ? html`<button type="button" class="wish__opt wish__opt--clear" disabled=${!!busy} onClick=${() => pick(null)}>${t('清除许愿')}<//>` : null}
+      <p class="wish__note">${t('许愿的阵营本局不会被禁用，全队生效；不保证抽到该阵营的干员。')}</p>
+    </div>` : null}
+  </div>`;
 }
 
 /** 观战席: the room's spectators (host: ✕ frees a seat), and 入座 for a spectator while a player seat is free. */
@@ -228,6 +276,8 @@ export function RoomScreen() {
   const alive = useRef(true);
   const inFlight = useRef(false); // synchronous guard against double clicks (state updates are async)
   useEffect(() => () => { alive.current = false; }, []);
+  // 阵营许愿 (remake option): the core bonds and their icons, for the seat's wish picker
+  useData('bonds', 'assets');
 
   if (!room) return null;
   const online = conn.status === 'online';
@@ -251,6 +301,8 @@ export function RoomScreen() {
   const start = () => run('start', () => net.request('room.start', {}));
   const addBot = () => run('add', () => net.request('room.addBot', {}));
   const removeBot = (seat) => run(`rm${seat}`, () => net.request('room.removeBot', { seat }));
+  // 阵营许愿 (remake option): one core bond per seat, kept out of the match's disabled bonds for the whole team
+  const setWish = (bondId) => run('wish', () => net.request('room.wish', { bondId }));
   // the host removes a human before the match (community report #17): asked first; the player may join again. The
   // confirmed player's id goes along: if they left and someone else took the seat meanwhile, the server refuses it.
   const kick = async (seat, name, playerId) => {
@@ -323,7 +375,8 @@ export function RoomScreen() {
 
     <main class=${`seats${coop ? '' : ' seats--solo'}`}>
       ${facts.seats.map((s, i) => html`<${SeatCard} key=${s ? `p${s.playerId}` : `e${i}`} seat=${s} index=${i} room=${room} facts=${facts}
-        myId=${me.playerId} busy=${busy} onAddBot=${addBot} onRemoveBot=${removeBot} onKick=${kick} />`)}
+        myId=${me.playerId} busy=${busy} onAddBot=${addBot} onRemoveBot=${removeBot} onKick=${kick}
+        onWish=${setWish} wishBusy=${busy === 'wish'} />`)}
       ${coop ? null : html`<aside class="solo-brief brackets">
         <${MicroLabel} tone="mint">BRIEFING<//>
         <h2>${DIFFICULTY_NAMES[room.difficulty] ? t(DIFFICULTY_NAMES[room.difficulty]) : ''}<span class="num t-dim"> ${info.code}</span></h2>

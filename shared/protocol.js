@@ -307,6 +307,35 @@ export function checkDiyPicks(picks, { data, kitted = null } = { data: null }) {
   return { ok: true, picks: kept, dropped };
 }
 
+// ---- 阵营许愿 (remake option): room.wish { bondId } ------------------------------------------------------------------
+
+/**
+ * `room.wish { bondId }`: the one core bond (阵营) the seat wishes for — the match never disables it (server/match/
+ * pool.js drawDisabledBonds `protect`). The ban is one set for the whole match, so a wish protects the alliance, not
+ * only its own board; it promises nothing about what the shared pool offers. `null` clears the wish. Stored per
+ * session / seat like room.ownership; a match takes the wish its seat had when it started. The UI offers the core
+ * bonds only (data/bonds.json `isCore`): 8 of them, so four seats can never name more than the draw can spare.
+ */
+export const isWish = (v) => v === null || isId(v);
+
+/**
+ * Semantic check of a wish against the game data: `null` clears it, a bond id is kept when it is a core bond the mode
+ * keeps active (a bond inactive in the mode is banned anyway, so wishing for it would do nothing). LENIENT, like
+ * checkNotOwned: an unknown or non-core bond is dropped (the wish is cleared), never the whole message.
+ * @param {any} bondId `room.wish.bondId`
+ * @param {(id: string) => any} getBond bond record lookup (data.lookup('bonds', id))
+ * @param {Iterable<string>} [inactive] bond ids the mode disables (gd.modeInactiveBonds)
+ * @returns {{ ok: true, bondId: string | null } | { error: 'BAD_MSG', detail: string }}
+ */
+export function checkWish(bondId, getBond, inactive = null) {
+  if (!isWish(bondId)) return { error: 'BAD_MSG', detail: 'bad bondId' };
+  if (bondId === null) return { ok: true, bondId: null };
+  const rec = typeof getBond === 'function' ? getBond(bondId) : null;
+  if (!rec || rec.bondId !== bondId || !rec.isCore) return { ok: true, bondId: null };
+  if (inactive) for (const b of inactive) if (b === bondId) return { ok: true, bondId: null };
+  return { ok: true, bondId };
+}
+
 // ---- unit stats (user playtest #4 item 7): m.unitStats units and the browser battle's live stats ---------------------
 
 const fin = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
@@ -406,6 +435,9 @@ export const C2S = {
   // 自选编队 (0.2.0 DIY): the player's DIY slot picks; stored per session / seat like room.ownership (a match takes the
   // picks its seat had when it started; during a match they are stored for the next one: ROOM_STARTED)
   'room.diy': { picks: isDiyPicks },
+  // 阵营许愿 (remake option): the seat's wished core bond, kept out of this match's disabled bonds for the whole team;
+  // null clears it. Stored per session / seat like room.ownership (during a match it is stored for the next one).
+  'room.wish': { bondId: isWish },
   // spectator seats (remake feature, community report #26; MAX_SPECTATORS): take one of a co-op room's spectator seats —
   // in its lobby or while its match runs — never a player seat; the host frees one by playerId (the spectator gets
   // room.closed { reason: 'kicked' }). room.leave / g.leave leave a spectator seat like a player seat.

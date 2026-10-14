@@ -1,0 +1,416 @@
+diff -ruN old/public/css/screens/room.css new/public/css/screens/room.css
+--- old/public/css/screens/room.css	2026-10-09 13:11:41.897398600 +0800
++++ new/public/css/screens/room.css	2026-10-09 13:11:41.968400500 +0800
+@@ -313,3 +313,69 @@
+ .ready-count__icons .icon.is-on { color: var(--mint-400); filter: drop-shadow(0 0 4px var(--mint-glow)); }
+ 
+ .room-bar .btn--xl { min-width: 3.2rem; letter-spacing: .2em; }
++
++/* ---- 阵营许愿 (remake option): a seat's wished core bond, and the picker of the eight core bonds ---- */
++.wish { align-self: stretch; display: flex; flex-direction: column; align-items: stretch; gap: .05rem; }
++.wish__btn {
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  gap: .06rem;
++  width: 100%;
++  padding: .03rem .08rem;
++  background: rgba(255, 255, 255, .03);
++  border: 1px dashed var(--line-3);
++  color: var(--text-lo);
++  font-size: .15rem;
++  font-weight: 700;
++  letter-spacing: .04em;
++  cursor: pointer;
++  transition: color var(--t-fast), background-color var(--t-fast), border-color var(--t-fast);
++}
++.wish__btn:hover:not(:disabled) { color: var(--text-hi); background: rgba(255, 255, 255, .06); border-color: var(--line-2); }
++.wish__btn:disabled { cursor: default; }
++.wish__btn.is-set { border-style: solid; border-color: rgba(23, 249, 183, .45); background: rgba(23, 249, 183, .08); color: var(--mint-400); }
++.wish__icon { flex: none; width: .2rem; height: .2rem; object-fit: contain; }
++.wish__dot { flex: none; width: .2rem; height: .2rem; background: var(--line-3); border-radius: 50%; }
++.wish__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++.wish__caret { flex: none; width: .14rem; height: .14rem; opacity: .6; transform: rotate(90deg); transition: transform var(--t-fast); }
++.wish.is-open .wish__caret { transform: rotate(-90deg); }
++.wish__panel {
++  display: grid;
++  grid-template-columns: repeat(4, minmax(0, 1fr));
++  gap: .04rem;
++  padding: .06rem;
++  background: rgba(11, 14, 13, .96);
++  border: 1px solid var(--line-2);
++  box-shadow: 0 .1rem .26rem rgba(0, 0, 0, .5);
++}
++.wish__opt {
++  display: flex;
++  flex-direction: column;
++  align-items: center;
++  gap: .03rem;
++  padding: .05rem .02rem;
++  background: rgba(255, 255, 255, .03);
++  border: 1px solid transparent;
++  color: var(--text-md);
++  font-size: .12rem;
++  font-weight: 700;
++  cursor: pointer;
++  transition: color var(--t-fast), background-color var(--t-fast), border-color var(--t-fast);
++}
++.wish__opt:hover:not(:disabled) { color: var(--text-hi); background: rgba(255, 255, 255, .07); }
++.wish__opt:disabled { cursor: default; opacity: .5; }
++.wish__opt.is-active { color: var(--mint-400); border-color: rgba(23, 249, 183, .5); background: rgba(23, 249, 183, .1); }
++.wish__opt .wish__icon { width: .24rem; height: .24rem; }
++.wish__opt span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++.wish__opt--clear { grid-column: 1 / -1; color: var(--text-lo); }
++.wish__note {
++  grid-column: 1 / -1;
++  margin: 0;
++  color: var(--text-lo);
++  font-size: .11rem;
++  font-weight: 400;
++  line-height: 1.5;
++  letter-spacing: 0;
++  text-align: left;
++}
+diff -ruN old/public/js/render/board3d/load.js new/public/js/render/board3d/load.js
+--- old/public/js/render/board3d/load.js	2026-10-09 13:11:41.946401800 +0800
++++ new/public/js/render/board3d/load.js	2026-10-09 13:11:41.970398600 +0800
+@@ -27,15 +27,29 @@
+ /**
+  * Can this browser run the 3D board? (WebGL2 — three r163+ requires it.) Software / blocklisted GPUs ("major
+  * performance caveat") count as unavailable unless `allowSlow` (an explicit `?board=3d`).
++ *
++ * The probe context is KEPT for the life of the page (at most two: one strict, one allowing software rendering).
++ * It used to be created — and thrown away — on every call: `loseContext()` is asynchronous and does nothing when
++ * `WEBGL_lose_context` is missing, so repeated calls piled up contexts until the browser hit its budget
++ * (Chrome ≈ 16). From then on `getContext('webgl2')` returns null whatever the attributes are, the probe reported
++ * "unsupported", and the 3D board fell back to 2D — even with `?board=3d`, which only clears the performance
++ * caveat and cannot lift the budget. A page reload cleared it (remake fix).
+  */
++let probeStrict = null; // proven without the performance caveat
++let probeSlow = null;   // proven allowing software rendering (a strict pass counts as one)
++const forgetProbes = () => { probeStrict = null; probeSlow = null; };
++
+ export function webgl2Available(allowSlow = false) {
+   try {
+     if (typeof document === 'undefined') return false;
++    if (allowSlow ? probeSlow : probeStrict) return true;
+     const c = document.createElement('canvas');
+     const gl = c.getContext('webgl2', allowSlow ? {} : { failIfMajorPerformanceCaveat: true });
+     if (!gl) return false;
+-    const lose = gl.getExtension('WEBGL_lose_context');
+-    if (lose) lose.loseContext();
++    // a lost context (GPU reset) invalidates the proof: the next call probes again
++    c.addEventListener('webglcontextlost', forgetProbes, { once: true });
++    if (allowSlow) probeSlow = gl;
++    else { probeStrict = gl; probeSlow = gl; }
+     return true;
+   } catch { return false; }
+ }
+diff -ruN old/public/js/screens/room.js new/public/js/screens/room.js
+--- old/public/js/screens/room.js	2026-10-09 13:11:41.899398700 +0800
++++ new/public/js/screens/room.js	2026-10-09 13:11:41.969398900 +0800
+@@ -23,6 +23,9 @@
+ import { SettingsButton } from '../ui/settings.js';
+ import { LoadoutButton } from './loadout.js';
+ import { net } from '../net.js';
++import { useData, data } from '../data.js';
++import { bondIconUrl } from '../ui/assetUrls.js';
++import { Img } from '../ui/gameComponents.js';
+ import { store, useStore, shallowEqual, emptyMatch, isSpectating } from '../store.js';
+ import { difficultyInfo } from './lobby.js';
+ import { t, tc } from '../../../shared/i18n.js';
+@@ -99,7 +102,7 @@
+  */
+ export { copyText };
+ 
+-function SeatCard({ seat, index, room, facts, myId, busy, onAddBot, onRemoveBot, onKick }) {
++function SeatCard({ seat, index, room, facts, myId, busy, onAddBot, onRemoveBot, onKick, onWish, wishBusy }) {
+   const coop = room.mode !== 'solo';
+   if (!seat) {
+     const canAdd = coop && facts.isHost;
+@@ -138,6 +141,7 @@
+       <span class="seat__name">${seat.name || t('博士')}</span>
+       ${isMe ? html`<span class="seat__you">${t('你')}</span>` : null}
+     </div>
++    ${seat.isBot ? null : html`<${WishRow} seat=${seat} isMe=${isMe} busy=${wishBusy} onPick=${onWish} />`}
+     <${MicroLabel}>${seat.isBot ? 'AUTONOMOUS UNIT' : `DOCTOR #${doctorNo(seat.playerId)}`}<//>
+     <footer class="seat__foot">
+       <span class=${`seat__state seat__state--${state}`}>
+@@ -156,6 +160,50 @@
+   </article>`;
+ }
+ 
++/**
++ * 阵营许愿 (remake option): the bonds a seat may wish for — the core ones (data/bonds.json `isCore`, 8 of them).
++ * The match never disables a wished bond, and because the disabled set is one set for the whole match the wish
++ * protects the alliance, not only its own board. It promises nothing about what the shared pool offers: the wish only
++ * rules the bond out of the ban.
++ * @returns {{ bondId: string, name: string }[]}
++ */
++export function wishableBonds() {
++  const list = Array.isArray(data.list('bonds')) ? data.list('bonds') : [];
++  return list.filter((b) => b && typeof b.bondId === 'string' && b.isCore).map((b) => ({ bondId: b.bondId, name: b.name || b.bondId }));
++}
++
++/**
++ * 阵营许愿 row of a seat card: the wished bond (its icon and name), or 许愿阵营 for a seat that has none. The local
++ * player's seat opens a picker of the core bonds (plus 清除许愿); everyone else's is read-only. A bot has none.
++ */
++function WishRow({ seat, isMe, busy, onPick }) {
++  const [open, setOpen] = useState(false);
++  const bonds = wishableBonds();
++  const m = data.get('assets');
++  const cur = typeof seat.wish === 'string' && seat.wish ? seat.wish : null;
++  const rec = cur ? data.lookup('bonds', cur) : null;
++  if (!isMe && !cur) return null;
++  const pick = (bondId) => { setOpen(false); if (bondId !== cur) onPick(bondId); };
++  return html`<div class=${`wish${open ? ' is-open' : ''}`}>
++    <button type="button" class=${`wish__btn${cur ? ' is-set' : ''}`} disabled=${!isMe || !!busy}
++      aria-expanded=${open ? 'true' : 'false'} onClick=${() => isMe && setOpen(!open)}>
++      ${cur
++        ? html`<${Img} src=${bondIconUrl(m, cur)} class="wish__icon" fallback=${html`<i class="wish__dot"></i>`} />`
++        : html`<${Icon} name="plus" class="wish__icon" />`}
++      <span class="wish__text">${cur ? (rec?.name || cur) : t('许愿阵营')}</span>
++      ${isMe ? html`<${Icon} name="chevronRight" class="wish__caret" />` : null}
++    </button>
++    ${open && isMe ? html`<div class="wish__panel" role="radiogroup" aria-label=${t('许愿阵营')}>
++      ${bonds.map((b) => html`<button key=${b.bondId} type="button" role="radio" aria-checked=${cur === b.bondId ? 'true' : 'false'}
++          class=${`wish__opt${cur === b.bondId ? ' is-active' : ''}`} disabled=${!!busy} onClick=${() => pick(b.bondId)}>
++        <${Img} src=${bondIconUrl(m, b.bondId)} class="wish__icon" fallback=${html`<i class="wish__dot"></i>`} /><span>${b.name}</span>
++      </button>`)}
++      ${cur ? html`<button type="button" class="wish__opt wish__opt--clear" disabled=${!!busy} onClick=${() => pick(null)}>${t('清除许愿')}<//>` : null}
++      <p class="wish__note">${t('许愿的阵营本局不会被禁用，全队生效；不保证抽到该阵营的干员。')}</p>
++    </div>` : null}
++  </div>`;
++}
++
+ /** 观战席: the room's spectators (host: ✕ frees a seat), and 入座 for a spectator while a player seat is free. */
+ function SpectatorBar({ facts, myId, busy, onRemove, onSit }) {
+   if (!facts.spectators.length) return null;
+@@ -228,6 +276,8 @@
+   const alive = useRef(true);
+   const inFlight = useRef(false); // synchronous guard against double clicks (state updates are async)
+   useEffect(() => () => { alive.current = false; }, []);
++  // 阵营许愿 (remake option): the core bonds and their icons, for the seat's wish picker
++  useData('bonds', 'assets');
+ 
+   if (!room) return null;
+   const online = conn.status === 'online';
+@@ -251,6 +301,8 @@
+   const start = () => run('start', () => net.request('room.start', {}));
+   const addBot = () => run('add', () => net.request('room.addBot', {}));
+   const removeBot = (seat) => run(`rm${seat}`, () => net.request('room.removeBot', { seat }));
++  // 阵营许愿 (remake option): one core bond per seat, kept out of the match's disabled bonds for the whole team
++  const setWish = (bondId) => run('wish', () => net.request('room.wish', { bondId }));
+   // the host removes a human before the match (community report #17): asked first; the player may join again. The
+   // confirmed player's id goes along: if they left and someone else took the seat meanwhile, the server refuses it.
+   const kick = async (seat, name, playerId) => {
+@@ -323,7 +375,8 @@
+ 
+     <main class=${`seats${coop ? '' : ' seats--solo'}`}>
+       ${facts.seats.map((s, i) => html`<${SeatCard} key=${s ? `p${s.playerId}` : `e${i}`} seat=${s} index=${i} room=${room} facts=${facts}
+-        myId=${me.playerId} busy=${busy} onAddBot=${addBot} onRemoveBot=${removeBot} onKick=${kick} />`)}
++        myId=${me.playerId} busy=${busy} onAddBot=${addBot} onRemoveBot=${removeBot} onKick=${kick}
++        onWish=${setWish} wishBusy=${busy === 'wish'} />`)}
+       ${coop ? null : html`<aside class="solo-brief brackets">
+         <${MicroLabel} tone="mint">BRIEFING<//>
+         <h2>${DIFFICULTY_NAMES[room.difficulty] ? t(DIFFICULTY_NAMES[room.difficulty]) : ''}<span class="num t-dim"> ${info.code}</span></h2>
+diff -ruN old/server/lobby.js new/server/lobby.js
+--- old/server/lobby.js	2026-10-09 13:11:41.899398700 +0800
++++ new/server/lobby.js	2026-10-09 13:11:41.972404200 +0800
+@@ -100,7 +100,7 @@
+ 
+ import { randomBytes, randomInt } from 'node:crypto';
+ import { ERR, MAX_SEATS, MAX_SPECTATORS, ROOM_CODE_LEN, modeIdFor } from '../shared/constants.js';
+-import { checkLoadout, checkLoadoutOps, cultivationCharIds, checkNotOwned, checkDiyPicks } from '../shared/protocol.js';
++import { checkLoadout, checkLoadoutOps, cultivationCharIds, checkNotOwned, checkDiyPicks, checkWish } from '../shared/protocol.js';
+ import { encode, isDroppable, isErrCode, sendRaw, sendSession } from './net.js';
+ import { getData as defaultGetData, lookup } from './data.js';
+ import { Match as DefaultMatch } from './match/Match.js';
+@@ -231,7 +231,9 @@
+       aiPicksLast: this.aiPicksLast,
+       inMatch: !!this.match,
+       seats: this.seats.map((s) => (s
+-        ? { seat: s.seat, playerId: s.playerId, name: s.name, isBot: s.isBot, ready: s.ready, connected: s.connected && !s.left }
++        ? { seat: s.seat, playerId: s.playerId, name: s.name, isBot: s.isBot, ready: s.ready, connected: s.connected && !s.left,
++            // 阵营许愿 (remake option): the bond this seat wishes for, shown on its card (null: none)
++            wish: s.isBot ? null : (s.wish || null) }
+         : null)),
+       spectators: this.spectators.map((s) => ({ playerId: s.playerId, name: s.name, connected: s.connected })),
+     };
+@@ -346,6 +348,7 @@
+       case 'room.loadout': return this.loadout(session, msg);
+       case 'room.ownership': return this.ownership(session, msg);
+       case 'room.diy': return this.diy(session, msg);
++      case 'room.wish': return this.wish(session, msg);
+       case 'room.spectate': return this.spectate(session, msg);
+       case 'room.removeSpectator': return this.removeSpectator(session, msg);
+       default:
+@@ -690,6 +693,29 @@
+     return OK;
+   }
+ 
++  /**
++   * room.wish (阵营许愿, remake option): the one core bond the seat wishes for — the match never disables it
++   * (server/match/pool.js drawDisabledBonds `protect`). The disabled-bond set is one set for the whole match, so a
++   * wish protects the alliance, not only its own board; it promises nothing about what the shared pool offers.
++   * Stored on the session and the seat like room.ownership (see the header). A running match never takes it: it keeps
++   * the wish its seat had at its start.
++   */
++  wish(session, { bondId }) {
++    const data = this.safeData();
++    const res = checkWish(bondId, (id) => lookup('bonds', id, data));
++    if (!res || res.error) return fail(res && isErrCode(res.error) ? res.error : ERR.BAD_MSG, res && res.detail);
++    session.wish = res.bondId;
++    const room = this.roomOf(session);
++    if (!room) return OK;
++    const seat = room.seatOf(session.playerId);
++    if (seat) seat.wish = res.bondId;
++    if (room.match && seat) return fail(ERR.ROOM_STARTED, 'stored for the next match');
++    // unlike room.ownership / room.diy (a private setting), a wish is shown on every seat's card, so the room's
++    // state goes out again: the alliance sees who asked for what before it starts
++    this.broadcastState(room);
++    return OK;
++  }
++
+   /** Extra fields of every `welcome` (net.js): the operators a 自选 slot may field (shared/diy.js `kitted`). */
+   welcomeInfo() {
+     return { diyKitted: KITTED_CHARS };
+@@ -712,6 +738,8 @@
+       notOwned: s.isBot ? null : s.notOwned || null,
+       // 0.2.0 自选编队: the human's checked DIY picks (bots field no 自选 piece [ASSUMED])
+       diy: s.isBot ? null : s.diy || null,
++      // 阵营许愿 (remake option): the human's wished core bond, never among this match's disabled bonds (bots wish none)
++      wish: s.isBot ? null : s.wish || null,
+     }));
+     // lastPublic / results: the latest m.public broadcast and the m.result frames (encoded), kept for the replay.
+     const ctx = { live: true, ended: false, disposed: false, match: null, lastPublic: null, sharedResult: null, results: new Map() };
+@@ -975,6 +1003,7 @@
+       ops: session.ops || null,
+       notOwned: session.notOwned || null,
+       diy: session.diy || null,
++      wish: session.wish || null,
+     };
+   }
+ 
+diff -ruN old/server/match/Match.js new/server/match/Match.js
+--- old/server/match/Match.js	2026-10-09 13:11:41.900405300 +0800
++++ new/server/match/Match.js	2026-10-09 13:11:41.971403200 +0800
+@@ -326,8 +326,16 @@
+     this.factions = setup.factions;
+     this.bossId = setup.bossId;
+     this.hiddenBossId = setup.hiddenBossId;
+-    const bans = drawDisabledBonds(this.gd, this.rngSetup);
++    // 阵营许愿 (remake option): the bonds the seats wished for, deduplicated (two seats may name the same one) —
++    // the match never disables them. Empty when nobody wished: the draw is then exactly as before.
++    const wished = [];
++    for (const s of opts.seats) {
++      if (s && typeof s.wish === 'string' && s.wish && !wished.includes(s.wish)) wished.push(s.wish);
++    }
++    const bans = drawDisabledBonds(this.gd, this.rngSetup, wished);
+     this.disabledBonds = bans.drawn;
++    /** 阵营许愿: the wished bonds honoured this match (a subset of `wished`; see server/match/pool.js). */
++    this.protectedBonds = bans.protected;
+     this.staticInactiveBonds = bans.staticOff;
+     this.bannedChess = bans.banned;
+     this.pool = new SharedPool(this.gd, { banned: bans.banned });
+diff -ruN old/server/match/pool.js new/server/match/pool.js
+--- old/server/match/pool.js	2026-10-09 13:11:41.901399300 +0800
++++ new/server/match/pool.js	2026-10-09 13:11:41.971403200 +0800
+@@ -20,11 +20,21 @@
+  * Per-match disabled bond set D and banned chess (research 01 A2): D = uniform sample of `core` core bonds and `addon`
+  * add-on bonds among weight > 0 bonds that are active in the mode. A visible chess is banned iff every one of its
+  * bonds is in D ∪ mode.inactiveBondIds.
++ *
++ * 阵营许愿 (remake option, off by default): `protect` names the bonds the room's seats wished for. A protected core
++ * bond is never drawn into D, so it stays playable this match. Notes on what that does and does not mean:
++ *   * the ban is ONE set for the whole match, so a wish protects the alliance, not only its own board;
++ *   * a chess is still banned when its *other* bonds are all off — protection covers the bond, not its operators;
++ *   * nothing is promised to be offered: the shared pool stays random, the wish only rules the bond out of the ban;
++ *   * core bonds only (data/bonds.json `isCore`, 8 of them), and never more than the draw can spare (8 core with 3
++ *     banned ⇒ at most 5 honoured, and 4 seats can name 4 at most) — the difficulty keeps its banned-bond count.
++ * With `protect` absent or empty (the normal case, and every test) the draw is exactly as before.
+  * @param {import('./gamedata.js').GameData} gd
+  * @param {Function} rng seeded rng (createRng)
+- * @returns {{ drawn: string[], staticOff: string[], banned: string[] }}
++ * @param {Iterable<string> | null} [protect] bond ids kept out of the draw (阵营许愿)
++ * @returns {{ drawn: string[], staticOff: string[], banned: string[], protected: string[] }}
+  */
+-export function drawDisabledBonds(gd, rng) {
++export function drawDisabledBonds(gd, rng, protect = null) {
+   const { core: nCore, addon: nAddon } = gd.bans(gd.difficulty);
+   const staticOff = [...gd.modeInactiveBonds].filter((b) => gd.bond(b)).sort();
+   const eligible = gd.bondIds.filter((b) => {
+@@ -33,7 +43,13 @@
+   });
+   const core = eligible.filter((b) => gd.bond(b).isCore);
+   const addon = eligible.filter((b) => !gd.bond(b).isCore);
+-  const drawn = [...sample(core, nCore, rng), ...sample(addon, nAddon, rng)].sort();
++  const wished = new Set();
++  if (protect) for (const b of protect) if (typeof b === 'string') wished.add(b);
++  // honoured in core order (data order), never more than `spare`: that keeps nCore bonds to ban
++  const spare = Math.max(0, core.length - nCore);
++  const kept = core.filter((b) => wished.has(b)).slice(0, spare);
++  const shield = new Set(kept);
++  const drawn = [...sample(core.filter((b) => !shield.has(b)), nCore, rng), ...sample(addon, nAddon, rng)].sort();
+   const off = new Set([...drawn, ...staticOff]);
+   const banned = [];
+   for (const id of gd.visibleChess) {
+@@ -41,7 +57,7 @@
+     const bonds = Array.isArray(c.bonds) ? c.bonds : [];
+     if (bonds.length > 0 && bonds.every((b) => off.has(b))) banned.push(id);
+   }
+-  return { drawn, staticOff, banned };
++  return { drawn, staticOff, banned, protected: kept.slice().sort() };
+ }
+ 
+ function sample(arr, n, rng) {
+diff -ruN old/shared/protocol.js new/shared/protocol.js
+--- old/shared/protocol.js	2026-10-09 13:11:41.902400000 +0800
++++ new/shared/protocol.js	2026-10-09 13:11:41.973404900 +0800
+@@ -307,6 +307,35 @@
+   return { ok: true, picks: kept, dropped };
+ }
+ 
++// ---- 阵营许愿 (remake option): room.wish { bondId } ------------------------------------------------------------------
++
++/**
++ * `room.wish { bondId }`: the one core bond (阵营) the seat wishes for — the match never disables it (server/match/
++ * pool.js drawDisabledBonds `protect`). The ban is one set for the whole match, so a wish protects the alliance, not
++ * only its own board; it promises nothing about what the shared pool offers. `null` clears the wish. Stored per
++ * session / seat like room.ownership; a match takes the wish its seat had when it started. The UI offers the core
++ * bonds only (data/bonds.json `isCore`): 8 of them, so four seats can never name more than the draw can spare.
++ */
++export const isWish = (v) => v === null || isId(v);
++
++/**
++ * Semantic check of a wish against the game data: `null` clears it, a bond id is kept when it is a core bond the mode
++ * keeps active (a bond inactive in the mode is banned anyway, so wishing for it would do nothing). LENIENT, like
++ * checkNotOwned: an unknown or non-core bond is dropped (the wish is cleared), never the whole message.
++ * @param {any} bondId `room.wish.bondId`
++ * @param {(id: string) => any} getBond bond record lookup (data.lookup('bonds', id))
++ * @param {Iterable<string>} [inactive] bond ids the mode disables (gd.modeInactiveBonds)
++ * @returns {{ ok: true, bondId: string | null } | { error: 'BAD_MSG', detail: string }}
++ */
++export function checkWish(bondId, getBond, inactive = null) {
++  if (!isWish(bondId)) return { error: 'BAD_MSG', detail: 'bad bondId' };
++  if (bondId === null) return { ok: true, bondId: null };
++  const rec = typeof getBond === 'function' ? getBond(bondId) : null;
++  if (!rec || rec.bondId !== bondId || !rec.isCore) return { ok: true, bondId: null };
++  if (inactive) for (const b of inactive) if (b === bondId) return { ok: true, bondId: null };
++  return { ok: true, bondId };
++}
++
+ // ---- unit stats (user playtest #4 item 7): m.unitStats units and the browser battle's live stats ---------------------
+ 
+ const fin = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+@@ -403,6 +432,9 @@
+   // 自选编队 (0.2.0 DIY): the player's DIY slot picks; stored per session / seat like room.ownership (a match takes the
+   // picks its seat had when it started; during a match they are stored for the next one: ROOM_STARTED)
+   'room.diy': { picks: isDiyPicks },
++  // 阵营许愿 (remake option): the seat's wished core bond, kept out of this match's disabled bonds for the whole team;
++  // null clears it. Stored per session / seat like room.ownership (during a match it is stored for the next one).
++  'room.wish': { bondId: isWish },
+   // spectator seats (remake feature, community report #26; MAX_SPECTATORS): take one of a co-op room's spectator seats —
+   // in its lobby or while its match runs — never a player seat; the host frees one by playerId (the spectator gets
+   // room.closed { reason: 'kicked' }). room.leave / g.leave leave a spectator seat like a player seat.

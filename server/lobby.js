@@ -100,7 +100,7 @@
 
 import { randomBytes, randomInt } from 'node:crypto';
 import { ERR, MAX_SEATS, MAX_SPECTATORS, ROOM_CODE_LEN, modeIdFor } from '../shared/constants.js';
-import { checkLoadout, checkLoadoutOps, cultivationCharIds, checkNotOwned, checkDiyPicks } from '../shared/protocol.js';
+import { checkLoadout, checkLoadoutOps, cultivationCharIds, checkNotOwned, checkDiyPicks, checkWish } from '../shared/protocol.js';
 import { encode, isDroppable, isErrCode, sendRaw, sendSession } from './net.js';
 import { getData as defaultGetData, lookup } from './data.js';
 import { Match as DefaultMatch } from './match/Match.js';
@@ -231,7 +231,9 @@ export class Room {
       aiPicksLast: this.aiPicksLast,
       inMatch: !!this.match,
       seats: this.seats.map((s) => (s
-        ? { seat: s.seat, playerId: s.playerId, name: s.name, isBot: s.isBot, ready: s.ready, connected: s.connected && !s.left }
+        ? { seat: s.seat, playerId: s.playerId, name: s.name, isBot: s.isBot, ready: s.ready, connected: s.connected && !s.left,
+            // 阵营许愿 (remake option): the bond this seat wishes for, shown on its card (null: none)
+            wish: s.isBot ? null : (s.wish || null) }
         : null)),
       spectators: this.spectators.map((s) => ({ playerId: s.playerId, name: s.name, connected: s.connected })),
     };
@@ -348,6 +350,7 @@ export class Lobby {
       case 'room.loadout': return this.loadout(session, msg);
       case 'room.ownership': return this.ownership(session, msg);
       case 'room.diy': return this.diy(session, msg);
+      case 'room.wish': return this.wish(session, msg);
       case 'room.spectate': return this.spectate(session, msg);
       case 'room.removeSpectator': return this.removeSpectator(session, msg);
       default:
@@ -703,6 +706,29 @@ export class Lobby {
     return OK;
   }
 
+  /**
+   * room.wish (阵营许愿, remake option): the one core bond the seat wishes for — the match never disables it
+   * (server/match/pool.js drawDisabledBonds `protect`). The disabled-bond set is one set for the whole match, so a
+   * wish protects the alliance, not only its own board; it promises nothing about what the shared pool offers.
+   * Stored on the session and the seat like room.ownership (see the header). A running match never takes it: it keeps
+   * the wish its seat had at its start.
+   */
+  wish(session, { bondId }) {
+    const data = this.safeData();
+    const res = checkWish(bondId, (id) => lookup('bonds', id, data));
+    if (!res || res.error) return fail(res && isErrCode(res.error) ? res.error : ERR.BAD_MSG, res && res.detail);
+    session.wish = res.bondId;
+    const room = this.roomOf(session);
+    if (!room) return OK;
+    const seat = room.seatOf(session.playerId);
+    if (seat) seat.wish = res.bondId;
+    if (room.match && seat) return fail(ERR.ROOM_STARTED, 'stored for the next match');
+    // unlike room.ownership / room.diy (a private setting), a wish is shown on every seat's card, so the room's
+    // state goes out again: the alliance sees who asked for what before it starts
+    this.broadcastState(room);
+    return OK;
+  }
+
   /** Extra fields of every `welcome` (net.js): the operators a 自选 slot may field (shared/diy.js `kitted`). */
   welcomeInfo() {
     return { diyKitted: KITTED_CHARS };
@@ -725,6 +751,8 @@ export class Lobby {
       notOwned: s.isBot ? null : s.notOwned || null,
       // 0.2.0 自选编队: the human's checked DIY picks (bots field no 自选 piece [ASSUMED])
       diy: s.isBot ? null : s.diy || null,
+      // 阵营许愿 (remake option): the human's wished core bond, never among this match's disabled bonds (bots wish none)
+      wish: s.isBot ? null : s.wish || null,
     }));
     // lastPublic / results: the latest m.public broadcast and the m.result frames (encoded), kept for the replay.
     const ctx = { live: true, ended: false, disposed: false, match: null, lastPublic: null, sharedResult: null, results: new Map() };
@@ -988,6 +1016,7 @@ export class Lobby {
       ops: session.ops || null,
       notOwned: session.notOwned || null,
       diy: session.diy || null,
+      wish: session.wish || null,
     };
   }
 
