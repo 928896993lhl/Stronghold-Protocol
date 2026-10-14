@@ -379,3 +379,9 @@
   letter-spacing: 0;
   text-align: left;
 }
+
+.openq { display: flex; align-items: center; gap: .12rem; font-size: calc(.14 * var(--t)); }
+.openq__opt { --d-color: var(--mint-400); height: .36rem; padding: 0 .14rem; border: 1px solid var(--line-2); background: rgba(0, 0, 0, .3); font-size: calc(.15 * var(--t)); letter-spacing: .04em; }
+.openq__opt:last-child { border-right: 1px solid var(--line-2); }
+.openq__opt .icon { opacity: .25; }
+.openq__opt .icon.is-on { opacity: 1; }

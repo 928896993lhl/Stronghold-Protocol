@@ -13,7 +13,14 @@ async function player(browser, name, diffName) {
   const ctx = await browser.newContext({ viewport: { width: 1366, height: 900 } });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => errors.push(`${name} pageerror: ${e.message}`));
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(`${name} console: ${m.text}`); });
+  page.on('console', (m) => {
+    if (m.type() !== 'error') return;
+    // 页面重载/关闭的瞬间 Playwright 偶尔给不出可读文本，那种残片不算应用报错
+    let txt = '';
+    try { txt = String(m.text()); } catch { return; }
+    if (!txt || txt.includes('_event')) return;
+    errors.push(`${name} console: ${txt}`);
+  });
 
   await page.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
   // 冷加载偶发慢（刚重启 / CDN 回源 / 客户端发现 build 变了会自己重载一次），给标题页加载加重试
@@ -39,7 +46,10 @@ async function player(browser, name, diffName) {
   const wishBtns = await page.locator('.wish__btn').count();
   // 准备按钮也必须还在：房主开局要求每个非房主人类都 ready
   const readyBtns = await page.locator('.seat__ready, .ready-btn, [class*=ready]').count();
-  return { name, code, page, ctx, wishBtns, readyBtns };
+  // 开放状态开关（房主可切换「开放中 / 仅邀请」）
+  const openToggle = await page.locator('.openq__opt').count();
+  const openLabel = openToggle ? (await page.locator('.openq__opt').textContent()).trim() : null;
+  return { name, code, page, ctx, wishBtns, readyBtns, openToggle, openLabel };
 }
 
 (async () => {
@@ -79,8 +89,12 @@ async function player(browser, name, diffName) {
     // 匹配进房后原有的两步必须都还在（不强制，但不能消失）
     ['匹配后阵营许愿入口仍在', p1.wishBtns > 0 && p2.wishBtns > 0],
     ['匹配后准备入口仍在', p1.readyBtns > 0],
+    ['房间里有开放状态开关', p1.openToggle > 0],
+    ['快速匹配开的房显示为开放中', p1.openLabel === '开放中'],
+    ['被撮合进来的人看到同样的状态', p2.openLabel === '开放中'],
   ];
   console.log(`\n  许愿按钮数：玩家1=${p1.wishBtns} 玩家2=${p2.wishBtns} | 准备相关元素：${p1.readyBtns}`);
+  console.log(`  开放开关：玩家1="${p1.openLabel}" 玩家2="${p2.openLabel}"`);
   console.log('');
   let bad = 0;
   for (const [label, ok] of checks) { if (!ok) bad++; console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${label}`); }

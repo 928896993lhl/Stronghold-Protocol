@@ -267,6 +267,29 @@ function AiLastToggle({ option, busy, onToggle }) {
   </div>`;
 }
 
+/**
+ * 快速匹配 (remake option): whether strangers who picked the same difficulty and pressed 快速匹配
+ * drop straight into this room (server/lobby.js room.setOpen). Host-only and lobby-only: a running
+ * match clears the flag, and a solo room takes no strangers at all.
+ */
+function OpenToggle({ room, isHost, busy, onToggle }) {
+  if (room.mode !== 'coop' || room.inMatch) return null;
+  return html`<div class="openq">
+    <${Tooltip} text=${room.open
+      ? t('开放中：选了同样难度的博士点「快速匹配」会直接坐进这间；关掉后只能凭同盟密钥进入')
+      : t('仅邀请：只有拿到同盟密钥的人能进来。开启后，选了同样难度的博士点「快速匹配」会直接坐进这间')}>
+      <button type="button" role="switch" aria-checked=${room.open ? 'true' : 'false'}
+          class=${`dpick__opt openq__opt${room.open ? ' is-active' : ''}`} disabled=${!isHost || !!busy}
+          onClick=${() => isHost && onToggle(!room.open)}>
+        <${Icon} name="users" class=${room.open ? 'is-on' : ''} />${room.open ? t('开放中') : t('仅邀请')}
+      </button>
+    <//>
+    ${isHost
+      ? (room.open ? html`<span class="t-dim">${t('同难度的人会进来')}</span>` : null)
+      : html`<span class="t-dim">${t('由创建者设置')}</span>`}
+  </div>`;
+}
+
 /** Room screen component. */
 export function RoomScreen() {
   const room = useStore((s) => s.room);
@@ -312,6 +335,8 @@ export function RoomScreen() {
   };
   const setDifficulty = (difficulty) => run('diff', () => net.request('room.setDifficulty', { difficulty }));
   const setAiLast = (on) => run('ailast', () => net.request('room.setAiPicksLast', { on }));
+  // 快速匹配 (remake option): 开放中的房间会被同样难度、点了「快速匹配」的陌生人直接坐进来
+  const setOpen = (open) => run('open', () => net.request('room.setOpen', { open }));
   // spectator seats: the host frees one; a spectator takes a free player seat with room.join of this room
   const removeSpectator = (playerId) => run(`rs${playerId}`, () => net.request('room.removeSpectator', { playerId }));
   const sit = () => run('sit', () => net.request('room.join', { code: room.code }));
@@ -396,6 +421,7 @@ export function RoomScreen() {
         <div class="room-bar__opts">
           <${DifficultyPicker} room=${room} isHost=${facts.isHost} busy=${busy} onPick=${setDifficulty} />
           <${AiLastToggle} option=${aiLastOption(room, me.playerId)} busy=${busy} onToggle=${setAiLast} />
+          <${OpenToggle} room=${room} isHost=${facts.isHost} busy=${busy} onToggle=${setOpen} />
         </div>
       </div>
       <div class="room-bar__center">

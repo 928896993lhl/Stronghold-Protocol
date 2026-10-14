@@ -26,7 +26,7 @@
 上游这三个默认值（64 / 16 / 8）只能由代码传 `opts` 注入，没有环境变量入口。对外开放后
 手机流量走 CGNAT 时几百人共享一个出口 IP，会先撞到它们，症状是「有些人连不上、建不了房」，
 很像服务器挂了但其实是配额。**必须重启游戏服务才生效。**
-| 7 | 快速匹配：选难度后自动进同难度的开放房间，没有就开一间等别人进来（不用交换房间码） | 3 个：server/lobby.js / shared/protocol.js / **public/js/screens/lobby.js** | `sh custom/apply-quick-match.sh` + **重启 stronghold** | 2026-10-14 |
+| 7 | 快速匹配：选难度后自动进同难度的开放房间，没有就开一间等别人进来；房间页可看/切换「开放中·仅邀请」 | 5 个：server/lobby.js / shared/protocol.js / **screens/lobby.js** / screens/room.js / room.css | `sh custom/apply-quick-match.sh` + **重启 stronghold** | 2026-10-14 |
 
 撮合只是 `create()` / `join()` 前面的一层查找，房间码、席位规则、同 IP 建房上限、
 状态广播全部复用上游实现。**撮合发生在开局之前，与阵营许愿同一层，不碰 `server/sim/`。**
