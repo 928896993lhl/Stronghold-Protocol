@@ -273,6 +273,10 @@ export function LobbyScreen() {
     }
   };
   const create = () => run('create', () => net.request('room.create', { mode: roomMode, difficulty }));
+  // 快速匹配 (remake option): no alliance key — the server drops the player into an open room asking for the
+  // same mode + difficulty, or opens one and waits. Either way it answers with the usual room.state, so the
+  // screen moves on exactly like create()/join() do (main.js listens for room.state).
+  const quick = () => run('quick', () => net.request('room.quickMatch', { mode: roomMode, difficulty }));
   const join = (c = code) => {
     // `onClick=${join}` hands the click EVENT as the first argument, and a default parameter only applies to
     // `undefined` — codeArg keeps an event target out of the key and falls back to the input field
@@ -372,6 +376,9 @@ export function LobbyScreen() {
               ${roomMode === 'solo' ? t('开始独立模拟') : t('创建同盟')}
             <//>
           <//>
+          ${roomMode === 'coop' ? html`<${Tooltip} block=${true} text=${t('直接进入一个同难度的开放同盟；如果没有，就为你开一间等别人进来')}>
+            <${Button} variant="secondary" size="lg" block=${true} icon="users" loading=${busy === 'quick'} disabled=${!online} onClick=${quick}>${t('快速匹配')}<//>
+          <//>` : null}
           <div class="create-box__hint">
             ${online
               ? html`<span>${roomMode === 'solo' ? t('创建后即可开始模拟') : t('创建后可邀请好友或添加 AI 队友')}</span>`

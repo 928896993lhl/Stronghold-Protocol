@@ -201,6 +201,11 @@ export class Room {
     this.ownerKey = null;
     /** @type {string | null} per-network limit key of whoever started the running match */
     this.matchKey = null;
+    /**
+     * 快速匹配 (remake option): strangers asking for this room's mode + difficulty may drop in without the
+     * alliance key. Set by room.quickMatch / room.setOpen, cleared once the match starts.
+     */
+    this.open = false;
     this.createdAt = now;
     this.disposed = false;
   }
@@ -230,6 +235,8 @@ export class Room {
       difficulty: this.difficulty,
       aiPicksLast: this.aiPicksLast,
       inMatch: !!this.match,
+      // 快速匹配 (remake option): strangers with the same mode + difficulty may drop in without the code
+      open: this.open === true,
       seats: this.seats.map((s) => (s
         ? { seat: s.seat, playerId: s.playerId, name: s.name, isBot: s.isBot, ready: s.ready, connected: s.connected && !s.left,
             // 阵营许愿 (remake option): the bond this seat wishes for, shown on its card (null: none)
@@ -336,6 +343,8 @@ export class Lobby {
   onMessage(session, msg) {
     switch (msg.t) {
       case 'room.create': return this.create(session, msg);
+      case 'room.quickMatch': return this.quickMatch(session, msg);
+      case 'room.setOpen': return this.setOpen(session, msg);
       case 'room.join': return this.join(session, msg);
       case 'room.leave': return this.leave(session);
       case 'room.ready': return this.ready(session, msg);
@@ -456,6 +465,48 @@ export class Lobby {
     const room = this.roomOf(session);
     if (!room) return fail(ERR.NOT_IN_ROOM);
     this.removeMember(room, session.playerId);
+    return OK;
+  }
+
+  /**
+   * 快速匹配 (remake option): drop into an open room that asked for the same mode + difficulty, else open one.
+   *
+   * Deliberately the thinnest thing that answers "路人进来选个难度就能玩" — it is a lookup in front of the
+   * upstream create()/join(), so the room code, the seat rules (`freeSeat`, the solo refusal), the per-network
+   * room limits and every state broadcast stay exactly as upstream wrote them. Nothing here is reachable once a
+   * match runs: join() refuses a started room and startMatch clears the flag. A solo run has nothing to match
+   * (a solo room holds exactly one human), so it falls straight through to create.
+   *
+   * The pool / seed / ban logic is untouched: matching happens strictly before the match, as with room.wish.
+   */
+  quickMatch(session, { mode, difficulty }) {
+    if (mode !== 'solo') {
+      for (const room of this.rooms.values()) {
+        if (room.match || !room.open) continue;
+        if (room.mode !== mode || room.difficulty !== difficulty) continue;
+        if (room.freeSeat() < 0) continue;
+        const res = this.join(session, { code: room.code });
+        if (res && !res.error) return res;
+        // a lost race (the last seat went while we were looking): keep scanning instead of surfacing ROOM_FULL
+      }
+    }
+    const res = this.create(session, { mode, difficulty });
+    if (res && res.error) return res;
+    const room = this.roomOf(session);
+    // create() already broadcast the room with open: false; one more frame carries the flag the UI advertises
+    if (room && mode !== 'solo') { room.open = true; this.broadcastState(room); }
+    return res;
+  }
+
+  /** room.setOpen (host, lobby only): let strangers with the same mode + difficulty drop in without the key. */
+  setOpen(session, { open }) {
+    const room = this.roomOf(session);
+    if (!room) return fail(ERR.NOT_IN_ROOM);
+    if (room.hostId !== session.playerId) return fail(ERR.NOT_HOST);
+    if (room.match) return fail(ERR.ROOM_STARTED);
+    if (room.mode === 'solo') return fail(ERR.BAD_TARGET, 'solo rooms take no strangers');
+    room.open = open === true;
+    this.broadcastState(room);
     return OK;
   }
 
@@ -742,6 +793,8 @@ export class Lobby {
   startMatch(room, key = null) {
     const host = room.seatOf(room.hostId);
     if (host) host.ready = true;
+    // a running match takes no more strangers (join() refuses it anyway); drop the flag so the UI stops advertising
+    room.open = false;
     const seats = room.seats.filter(Boolean).map((s) => ({
       seat: s.seat, playerId: s.playerId, name: s.name, isBot: s.isBot, connected: s.connected,
       // DESIGN §16: the human's checked operator loadout and (0.2.2) per-operator 潜能 / 练度 (bots fight with the defaults)
